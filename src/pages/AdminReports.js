@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 import {
   ArrowLeft,
   BarChart3,
@@ -16,16 +18,75 @@ import {
   AlertTriangle,
 } from "lucide-react";
 
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import "./AdminReports.css";
 
 function AdminReports() {
-  const livestockData = [
-    { type: "Swine", total: 22, percent: "42%", value: "₱168,000" },
-    { type: "Goat", total: 14, percent: "27%", value: "₱76,500" },
-    { type: "Cattle", total: 11, percent: "21%", value: "₱210,000" },
-    { type: "Poultry", total: 9, percent: "10%", value: "₱32,500" },
-  ];
+  const navigate = useNavigate();
+
+  const [metrics, setMetrics] = useState({
+    totalFarmers: 0,
+    totalBuyers: 0,
+    livestockSold: 0,
+    tradeValue: 0,
+  });
+
+  const [livestockData, setLivestockData] = useState([]);
+  const [verification, setVerification] = useState({
+    approved: 0,
+    pending: 0,
+    rejected: 0,
+  });
+
+  const [monthlyTransactions, setMonthlyTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const fetchReports = async () => {
+      try {
+        const token = localStorage.getItem("token");
+
+        if (!token) {
+          navigate("/login");
+          return;
+        }
+
+        const res = await fetch("http://localhost:5000/api/admin/reports", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          setMessage(data.message || "Failed to load reports");
+          setLoading(false);
+          return;
+        }
+
+        setMetrics(data.metrics);
+        setLivestockData(data.livestockData);
+        setVerification(data.verification);
+        setMonthlyTransactions(data.monthlyTransactions);
+        setLoading(false);
+      } catch (error) {
+        setMessage("Cannot connect to backend server");
+        setLoading(false);
+      }
+    };
+
+    fetchReports();
+  }, [navigate]);
+
+  if (loading) {
+    return <h2 style={{ padding: "30px" }}>Loading reports...</h2>;
+  }
+
+  if (message) {
+    return <h2 style={{ padding: "30px", color: "red" }}>{message}</h2>;
+  }
 
   return (
     <div className="reports-page">
@@ -48,9 +109,8 @@ function AdminReports() {
         <div className="filter-box">
           <Calendar size={18} />
           <select>
-            <option>May 2026</option>
-            <option>April 2026</option>
-            <option>March 2026</option>
+            <option>Current Month</option>
+            <option>Previous Month</option>
           </select>
         </div>
 
@@ -65,17 +125,17 @@ function AdminReports() {
           </select>
         </div>
 
-        <button className="primary-action">
+        <button className="primary-action" type="button">
           <Download size={18} />
           Export PDF
         </button>
 
-        <button className="secondary-action">
+        <button className="secondary-action" type="button">
           <FileSpreadsheet size={18} />
           Export Excel
         </button>
 
-        <button className="print-action">
+        <button className="print-action" type="button" onClick={() => window.print()}>
           <Printer size={18} />
           Print
         </button>
@@ -85,29 +145,29 @@ function AdminReports() {
         <MetricCard
           icon={<Users />}
           label="Total Farmers"
-          value="82"
-          change="+8 this month"
+          value={metrics.totalFarmers}
+          change="Registered farmer accounts"
         />
 
         <MetricCard
           icon={<ShoppingBag />}
           label="Total Buyers"
-          value="46"
-          change="+4 this month"
+          value={metrics.totalBuyers}
+          change="Registered buyer accounts"
         />
 
         <MetricCard
           icon={<BarChart3 />}
           label="Livestock Sold"
-          value="34"
-          change="+18% growth"
+          value={metrics.livestockSold}
+          change="Completed transactions"
         />
 
         <MetricCard
           icon={<TrendingUp />}
           label="Trade Value"
-          value="₱245K"
-          change="Recorded this month"
+          value={`₱${Number(metrics.tradeValue).toLocaleString()}`}
+          change="Recorded completed sales"
         />
       </section>
 
@@ -123,21 +183,27 @@ function AdminReports() {
           </div>
 
           <div className="livestock-performance">
-            {livestockData.map((item) => (
-              <div className="performance-row" key={item.type}>
-                <div>
-                  <strong>{item.type}</strong>
-                  <p>{item.total} records • {item.value}</p>
-                </div>
+            {livestockData.length === 0 ? (
+              <p>No livestock data available.</p>
+            ) : (
+              livestockData.map((item) => (
+                <div className="performance-row" key={item.type}>
+                  <div>
+                    <strong>{item.type}</strong>
+                    <p>
+                      {item.total} records • ₱{Number(item.value).toLocaleString()}
+                    </p>
+                  </div>
 
-                <div className="progress-area">
-                  <span>{item.percent}</span>
-                  <div className="progress-bar">
-                    <div style={{ width: item.percent }}></div>
+                  <div className="progress-area">
+                    <span>{item.percent}</span>
+                    <div className="progress-bar">
+                      <div style={{ width: item.percent }}></div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 
@@ -153,7 +219,7 @@ function AdminReports() {
 
           <ReportItem title="Monthly Sales Report" status="Ready" />
           <ReportItem title="Livestock Category Report" status="Ready" />
-          <ReportItem title="Verification Report" status="Draft" />
+          <ReportItem title="Verification Report" status="Ready" />
           <ReportItem title="User Registration Report" status="Ready" />
         </div>
       </section>
@@ -170,21 +236,21 @@ function AdminReports() {
           <StatusSummary
             icon={<CheckCircle />}
             title="Approved Documents"
-            value="32"
+            value={verification.approved}
             type="success"
           />
 
           <StatusSummary
             icon={<Clock />}
             title="Pending Review"
-            value="14"
+            value={verification.pending}
             type="warning"
           />
 
           <StatusSummary
             icon={<AlertTriangle />}
             title="Rejected / Flagged"
-            value="5"
+            value={verification.rejected}
             type="danger"
           />
         </div>
@@ -210,37 +276,21 @@ function AdminReports() {
               </thead>
 
               <tbody>
-                <tr>
-                  <td>Swine</td>
-                  <td>14</td>
-                  <td>5</td>
-                  <td>1</td>
-                  <td>₱168,000</td>
-                </tr>
-
-                <tr>
-                  <td>Goat</td>
-                  <td>9</td>
-                  <td>3</td>
-                  <td>1</td>
-                  <td>₱76,500</td>
-                </tr>
-
-                <tr>
-                  <td>Cattle</td>
-                  <td>6</td>
-                  <td>2</td>
-                  <td>1</td>
-                  <td>₱210,000</td>
-                </tr>
-
-                <tr>
-                  <td>Poultry</td>
-                  <td>5</td>
-                  <td>2</td>
-                  <td>0</td>
-                  <td>₱32,500</td>
-                </tr>
+                {monthlyTransactions.length === 0 ? (
+                  <tr>
+                    <td colSpan="5">No transaction data available.</td>
+                  </tr>
+                ) : (
+                  monthlyTransactions.map((item) => (
+                    <tr key={item.livestock_type}>
+                      <td>{item.livestock_type}</td>
+                      <td>{item.completed}</td>
+                      <td>{item.pending}</td>
+                      <td>{item.flagged}</td>
+                      <td>₱{Number(item.totalValue).toLocaleString()}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   LayoutDashboard,
@@ -20,11 +20,63 @@ import {
   UserCircle,
 } from "lucide-react";
 
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import "./AdminDashboard.css";
 
 function AdminDashboard() {
+  const navigate = useNavigate();
+
   const [showNotif, setShowNotif] = useState(false);
+  const [dashboardData, setDashboardData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const fetchAdminDashboard = async () => {
+      try {
+        const token = localStorage.getItem("token");
+
+        if (!token) {
+          navigate("/login");
+          return;
+        }
+
+        const res = await fetch("http://localhost:5000/api/admin/dashboard", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          setMessage(data.message || "Failed to load admin dashboard");
+          setLoading(false);
+          return;
+        }
+
+        setDashboardData(data);
+        setLoading(false);
+      } catch (error) {
+        setMessage("Cannot connect to backend server");
+        setLoading(false);
+      }
+    };
+
+    fetchAdminDashboard();
+  }, [navigate]);
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    navigate("/login");
+  };
+
+  if (loading) return <h2 style={{ padding: "30px" }}>Loading admin dashboard...</h2>;
+
+  if (message) {
+    return <h2 style={{ padding: "30px", color: "red" }}>{message}</h2>;
+  }
 
   return (
     <div className="pro-admin">
@@ -76,9 +128,9 @@ function AdminDashboard() {
           </Link>
         </nav>
 
-        <Link className="pro-logout" to="/login">
+        <button className="pro-logout" onClick={handleLogout}>
           <LogOut size={20} /> Logout
-        </Link>
+        </button>
       </aside>
 
       <main className="pro-main">
@@ -111,23 +163,25 @@ function AdminDashboard() {
                 <div className="notif-panel">
                   <h4>Notifications</h4>
 
-                  <div className="notif-item unread">
-                    <strong>New listing submitted</strong>
-                    <p>Swine listing needs approval.</p>
-                    <small>2 mins ago</small>
-                  </div>
-
-                  <div className="notif-item">
-                    <strong>Document pending</strong>
-                    <p>Cattle BAI permit requires review.</p>
-                    <small>15 mins ago</small>
-                  </div>
-
-                  <div className="notif-item">
-                    <strong>Transaction completed</strong>
-                    <p>Goat sale recorded successfully.</p>
-                    <small>1 hour ago</small>
-                  </div>
+                  {dashboardData.activity.length === 0 ? (
+                    <div className="notif-item">
+                      <strong>No notifications</strong>
+                      <p>No recent system activity.</p>
+                    </div>
+                  ) : (
+                    dashboardData.activity.slice(0, 3).map((item, index) => (
+                      <div
+                        className={index === 0 ? "notif-item unread" : "notif-item"}
+                        key={index}
+                      >
+                        <strong>Listing update</strong>
+                        <p>
+                          {item.farmer_name} submitted {item.livestock_type}.
+                        </p>
+                        <small>Recently</small>
+                      </div>
+                    ))
+                  )}
                 </div>
               )}
             </div>
@@ -146,29 +200,29 @@ function AdminDashboard() {
         <section className="kpi-grid">
           <Kpi
             title="Registered Users"
-            value="128"
-            trend="+12 this month"
+            value={dashboardData.stats.registeredUsers}
+            trend="Farmers and buyers"
             icon={<Users />}
           />
 
           <Kpi
             title="Active Listings"
-            value="56"
-            trend="4 livestock categories"
+            value={dashboardData.stats.activeListings}
+            trend="Available livestock"
             icon={<ClipboardCheck />}
           />
 
           <Kpi
             title="Pending Verification"
-            value="14"
+            value={dashboardData.stats.pendingVerification}
             trend="Needs action"
             icon={<Clock />}
           />
 
           <Kpi
             title="Completed Trades"
-            value="34"
-            trend="+18% increase"
+            value={dashboardData.stats.completedTrades}
+            trend="Recorded transactions"
             icon={<CheckCircle />}
           />
         </section>
@@ -199,56 +253,40 @@ function AdminDashboard() {
               </thead>
 
               <tbody>
-                <tr>
-                  <td>Almyr Belenson</td>
-                  <td>Swine</td>
-                  <td>Health Certificate</td>
-                  <td>
-                    <Workflow step="Verification" />
-                  </td>
-                  <td>
-                    <span className="badge pending">Pending</span>
-                  </td>
-                  <td>
-                    <button className="table-btn">
-                      <Eye size={17} />
-                    </button>
-                  </td>
-                </tr>
-
-                <tr>
-                  <td>Mario Santos</td>
-                  <td>Cattle</td>
-                  <td>BAI Permit</td>
-                  <td>
-                    <Workflow step="Confirmation" />
-                  </td>
-                  <td>
-                    <span className="badge approved">Approved</span>
-                  </td>
-                  <td>
-                    <button className="table-btn">
-                      <Eye size={17} />
-                    </button>
-                  </td>
-                </tr>
-
-                <tr>
-                  <td>Juan Dela Cruz</td>
-                  <td>Goat</td>
-                  <td>Vaccination Record</td>
-                  <td>
-                    <Workflow step="Negotiation" />
-                  </td>
-                  <td>
-                    <span className="badge flagged">Flagged</span>
-                  </td>
-                  <td>
-                    <button className="table-btn">
-                      <Eye size={17} />
-                    </button>
-                  </td>
-                </tr>
+                {dashboardData.verificationQueue.length === 0 ? (
+                  <tr>
+                    <td colSpan="6">No verification records yet.</td>
+                  </tr>
+                ) : (
+                  dashboardData.verificationQueue.map((item) => (
+                    <tr key={item.id}>
+                      <td>{item.farmer_name}</td>
+                      <td>{item.livestock_type}</td>
+                      <td>{item.health_status || "Health Document"}</td>
+                      <td>
+                        <Workflow step="Verification" />
+                      </td>
+                      <td>
+                        <span
+                          className={
+                            item.status === "Available"
+                              ? "badge approved"
+                              : item.status === "Pending"
+                              ? "badge pending"
+                              : "badge flagged"
+                          }
+                        >
+                          {item.status}
+                        </span>
+                      </td>
+                      <td>
+                        <button className="table-btn">
+                          <Eye size={17} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -256,23 +294,26 @@ function AdminDashboard() {
           <div className="pro-card">
             <h3>System Activity</h3>
 
-            <Activity
-              icon={<CheckCircle />}
-              title="Listing approved"
-              text="Swine listing approved."
-            />
-
-            <Activity
-              icon={<AlertTriangle />}
-              title="Document review"
-              text="Cattle permit pending."
-            />
-
-            <Activity
-              icon={<Users />}
-              title="New user"
-              text="Farmer account registered."
-            />
+            {dashboardData.activity.length === 0 ? (
+              <p>No system activity yet.</p>
+            ) : (
+              dashboardData.activity.map((item, index) => (
+                <Activity
+                  key={index}
+                  icon={
+                    item.status === "Available" ? (
+                      <CheckCircle />
+                    ) : item.status === "Pending" ? (
+                      <AlertTriangle />
+                    ) : (
+                      <Users />
+                    )
+                  }
+                  title={`${item.livestock_type} listing`}
+                  text={`${item.farmer_name} posted ${item.breed}.`}
+                />
+              ))
+            )}
           </div>
         </section>
 
@@ -294,7 +335,7 @@ function AdminDashboard() {
 
               <div className="map-info">
                 <strong>Veruela, Agusan del Sur</strong>
-                <p>23 registered seller locations</p>
+                <p>{dashboardData.stats.sellerLocations} registered seller locations</p>
               </div>
             </div>
           </div>
@@ -347,15 +388,7 @@ function Workflow({ step }) {
       <span className="done"></span>
       <span className="done"></span>
       <span className={step === "Negotiation" ? "active" : "done"}></span>
-      <span
-        className={
-          step === "Verification"
-            ? "active"
-            : step === "Confirmation"
-            ? "done"
-            : ""
-        }
-      ></span>
+      <span className={step === "Verification" ? "active" : "done"}></span>
       <span className={step === "Confirmation" ? "active" : ""}></span>
     </div>
   );

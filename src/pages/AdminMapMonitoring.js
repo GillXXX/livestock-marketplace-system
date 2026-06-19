@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 import {
   ArrowLeft,
   MapPin,
@@ -13,42 +15,110 @@ import {
   AlertTriangle,
 } from "lucide-react";
 
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import "./AdminMapMonitoring.css";
 
 function AdminMapMonitoring() {
-  const locations = [
-    {
-      id: 1,
-      farmer: "Almyr Belenson",
-      livestock: "Swine",
-      barangay: "Poblacion",
-      address: "Poblacion, Veruela",
-      listings: 3,
-      status: "Active",
-      risk: "Normal",
-    },
-    {
-      id: 2,
-      farmer: "Mario Santos",
-      livestock: "Cattle",
-      barangay: "La Fortuna",
-      address: "La Fortuna, Veruela",
-      listings: 2,
-      status: "Active",
-      risk: "Normal",
-    },
-    {
-      id: 3,
-      farmer: "Juan Dela Cruz",
-      livestock: "Goat",
-      barangay: "Sinobong",
-      address: "Sinobong, Veruela",
-      listings: 1,
-      status: "Pending",
-      risk: "Review",
-    },
+  const navigate = useNavigate();
+
+  const [locations, setLocations] = useState([]);
+  const [distribution, setDistribution] = useState([]);
+  const [stats, setStats] = useState({
+    sellerLocations: 0,
+    mappedListings: 0,
+    livestockTypes: 0,
+    withinVeruela: "0%",
+    pendingReview: 0,
+  });
+
+  const [searchText, setSearchText] = useState("");
+  const [livestockFilter, setLivestockFilter] = useState("All Livestock");
+  const [barangayFilter, setBarangayFilter] = useState("All Barangays");
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const fetchMapData = async () => {
+      try {
+        const token = localStorage.getItem("token");
+
+        if (!token) {
+          navigate("/login");
+          return;
+        }
+
+        const res = await fetch("http://localhost:5000/api/admin/map", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          setMessage(data.message || "Failed to load map data");
+          setLoading(false);
+          return;
+        }
+
+        setLocations(data.locations);
+        setDistribution(data.distribution);
+        setStats(data.stats);
+        setLoading(false);
+      } catch (error) {
+        setMessage("Cannot connect to backend server");
+        setLoading(false);
+      }
+    };
+
+    fetchMapData();
+  }, [navigate]);
+
+  const filteredLocations = locations.filter((item) => {
+    const search = searchText.toLowerCase();
+
+    const farmer = item.farmer || "";
+    const address = item.address || item.location || "";
+    const livestockTypes = item.livestock_types || "";
+
+    const matchesSearch =
+      farmer.toLowerCase().includes(search) ||
+      address.toLowerCase().includes(search) ||
+      livestockTypes.toLowerCase().includes(search);
+
+    const matchesLivestock =
+      livestockFilter === "All Livestock" ||
+      livestockTypes.includes(livestockFilter);
+
+    const matchesBarangay =
+      barangayFilter === "All Barangays" ||
+      address.includes(barangayFilter);
+
+    return matchesSearch && matchesLivestock && matchesBarangay;
+  });
+
+  const barangays = [
+    "All Barangays",
+    ...new Set(
+      locations
+        .map((item) => item.address || item.location)
+        .filter(Boolean)
+        .map((address) => address.split(",")[0])
+    ),
   ];
+
+  const totalDistribution = distribution.reduce(
+    (sum, item) => sum + Number(item.total),
+    0
+  );
+
+  if (loading) {
+    return <h2 style={{ padding: "30px" }}>Loading map monitoring...</h2>;
+  }
+
+  if (message) {
+    return <h2 style={{ padding: "30px", color: "red" }}>{message}</h2>;
+  }
 
   return (
     <div className="map-admin-page">
@@ -68,26 +138,57 @@ function AdminMapMonitoring() {
           </div>
         </div>
 
-        <button className="primary-action">
+        <button className="primary-action" type="button">
           <Navigation size={18} />
           Center Veruela Map
         </button>
       </header>
 
       <section className="map-kpi-grid">
-        <MapStat icon={<Users />} value="23" label="Seller Locations" trend="+4 this month" />
-        <MapStat icon={<ClipboardCheck />} value="56" label="Mapped Listings" trend="Active marketplace records" />
-        <MapStat icon={<Layers />} value="4" label="Livestock Types" trend="Swine, cattle, goat, poultry" />
-        <MapStat icon={<LocateFixed />} value="100%" label="Within Veruela" trend="Scope compliant" />
+        <MapStat
+          icon={<Users />}
+          value={stats.sellerLocations}
+          label="Seller Locations"
+          trend="Registered farmers"
+        />
+
+        <MapStat
+          icon={<ClipboardCheck />}
+          value={stats.mappedListings}
+          label="Mapped Listings"
+          trend="Marketplace records"
+        />
+
+        <MapStat
+          icon={<Layers />}
+          value={stats.livestockTypes}
+          label="Livestock Types"
+          trend="Swine, cattle, goat, poultry"
+        />
+
+        <MapStat
+          icon={<LocateFixed />}
+          value={stats.withinVeruela}
+          label="Within Veruela"
+          trend="Scope compliant"
+        />
       </section>
 
       <section className="map-filter-panel">
         <div className="map-search-box">
           <Search size={18} />
-          <input placeholder="Search farmer, barangay, livestock type..." />
+
+          <input
+            placeholder="Search farmer, barangay, livestock type..."
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+          />
         </div>
 
-        <select>
+        <select
+          value={livestockFilter}
+          onChange={(e) => setLivestockFilter(e.target.value)}
+        >
           <option>All Livestock</option>
           <option>Swine</option>
           <option>Cattle</option>
@@ -95,14 +196,16 @@ function AdminMapMonitoring() {
           <option>Poultry</option>
         </select>
 
-        <select>
-          <option>All Barangays</option>
-          <option>Poblacion</option>
-          <option>La Fortuna</option>
-          <option>Sinobong</option>
+        <select
+          value={barangayFilter}
+          onChange={(e) => setBarangayFilter(e.target.value)}
+        >
+          {barangays.map((barangay, index) => (
+            <option key={index}>{barangay}</option>
+          ))}
         </select>
 
-        <button>
+        <button type="button">
           <Filter size={17} />
           Apply Filter
         </button>
@@ -127,9 +230,23 @@ function AdminMapMonitoring() {
             <div className="route route-b"></div>
             <div className="route route-c"></div>
 
-            <MapMarker className="marker-a" count="3" name="Almyr Belenson" text="Swine • Poblacion" />
-            <MapMarker className="marker-b" count="2" name="Mario Santos" text="Cattle • La Fortuna" />
-            <MapMarker className="marker-c warning" count="1" name="Juan Dela Cruz" text="Goat • Sinobong" />
+            {filteredLocations.slice(0, 3).map((item, index) => (
+              <MapMarker
+                key={item.id}
+                className={
+                  index === 0
+                    ? "marker-a"
+                    : index === 1
+                    ? "marker-b"
+                    : "marker-c warning"
+                }
+                count={item.listings}
+                name={item.farmer}
+                text={`${item.livestock_types || "No livestock"} • ${
+                  item.address || item.location || "No location"
+                }`}
+              />
+            ))}
 
             <div className="map-center-label">
               <strong>Veruela, Agusan del Sur</strong>
@@ -137,8 +254,12 @@ function AdminMapMonitoring() {
             </div>
 
             <div className="map-legend">
-              <span><i className="active-dot"></i> Active</span>
-              <span><i className="pending-dot"></i> Pending Review</span>
+              <span>
+                <i className="active-dot"></i> Active
+              </span>
+              <span>
+                <i className="pending-dot"></i> Pending Review
+              </span>
             </div>
           </div>
         </div>
@@ -149,37 +270,48 @@ function AdminMapMonitoring() {
               <h3>Seller Records</h3>
               <p>Registered farm/seller locations</p>
             </div>
-            <strong className="record-count">{locations.length}</strong>
+
+            <strong className="record-count">{filteredLocations.length}</strong>
           </div>
 
           <div className="location-records">
-            {locations.map((item) => (
-              <div className="location-record" key={item.id}>
-                <div className="record-icon">
-                  <MapPin size={20} />
-                </div>
+            {filteredLocations.length === 0 ? (
+              <p>No seller locations found.</p>
+            ) : (
+              filteredLocations.map((item) => (
+                <div className="location-record" key={item.id}>
+                  <div className="record-icon">
+                    <MapPin size={20} />
+                  </div>
 
-                <div className="record-info">
-                  <strong>{item.farmer}</strong>
-                  <p>{item.address}</p>
+                  <div className="record-info">
+                    <strong>{item.farmer}</strong>
+                    <p>{item.address || item.location || "No location provided"}</p>
 
-                  <div className="record-tags">
-                    <span>{item.livestock}</span>
-                    <span>{item.listings} listing(s)</span>
+                    <div className="record-tags">
+                      <span>{item.livestock_types || "No livestock yet"}</span>
+                      <span>{item.listings} listing(s)</span>
+                    </div>
+                  </div>
+
+                  <div className="record-action">
+                    <span
+                      className={
+                        item.status === "Pending"
+                          ? "status-pending"
+                          : "status-active"
+                      }
+                    >
+                      {item.status === "Pending" ? "Pending" : "Active"}
+                    </span>
+
+                    <button type="button">
+                      <Eye size={17} />
+                    </button>
                   </div>
                 </div>
-
-                <div className="record-action">
-                  <span className={item.status === "Active" ? "status-active" : "status-pending"}>
-                    {item.status}
-                  </span>
-
-                  <button>
-                    <Eye size={17} />
-                  </button>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </aside>
       </section>
@@ -188,10 +320,25 @@ function AdminMapMonitoring() {
         <div className="map-card">
           <h3>Livestock Distribution</h3>
 
-          <Distribution label="Swine" value="22" width="72%" />
-          <Distribution label="Goat" value="14" width="48%" />
-          <Distribution label="Cattle" value="11" width="38%" />
-          <Distribution label="Poultry" value="9" width="30%" />
+          {distribution.length === 0 ? (
+            <p>No livestock distribution data yet.</p>
+          ) : (
+            distribution.map((item) => {
+              const percent =
+                totalDistribution > 0
+                  ? `${(Number(item.total) / totalDistribution) * 100}%`
+                  : "0%";
+
+              return (
+                <Distribution
+                  key={item.livestock_type}
+                  label={item.livestock_type}
+                  value={item.total}
+                  width={percent}
+                />
+              );
+            })
+          )}
         </div>
 
         <div className="map-card">
@@ -201,7 +348,7 @@ function AdminMapMonitoring() {
             <AlertTriangle size={20} />
             <div>
               <strong>Pending location review</strong>
-              <p>1 seller location needs MAO validation.</p>
+              <p>{stats.pendingReview} seller/listing record(s) need MAO validation.</p>
             </div>
           </div>
 

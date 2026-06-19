@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 import {
   ArrowLeft,
   Heart,
@@ -13,48 +15,124 @@ import {
   Clock3,
 } from "lucide-react";
 
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import "./BuyerFavorites.css";
 
 function BuyerFavorites() {
-  const savedListings = [
-    {
-      id: 1,
-      name: "Large White Swine",
-      type: "Swine",
-      price: 12000,
-      location: "Poblacion, Veruela",
-      seller: "Almyr Belenson",
-      saved: "2 days ago",
-      status: "Available",
-      image:
-        "https://images.unsplash.com/photo-1516467508483-a7212febe31a?q=80&w=1400&auto=format&fit=crop",
-    },
-    {
-      id: 2,
-      name: "Boer Goat",
-      type: "Goat",
-      price: 8500,
-      location: "Sinobong, Veruela",
-      seller: "Juan Dela Cruz",
-      saved: "Yesterday",
-      status: "Available",
-      image:
-        "https://images.unsplash.com/photo-1524024973431-2ad916746881?q=80&w=1400&auto=format&fit=crop",
-    },
-    {
-      id: 3,
-      name: "Brahman Cattle",
-      type: "Cattle",
-      price: 35000,
-      location: "La Fortuna, Veruela",
-      seller: "Mario Santos",
-      saved: "Today",
-      status: "Pending",
-      image:
-        "https://images.unsplash.com/photo-1500595046743-cd271d694d30?q=80&w=1400&auto=format&fit=crop",
-    },
-  ];
+  const navigate = useNavigate();
+
+  const [savedListings, setSavedListings] = useState([]);
+  const [filteredListings, setFilteredListings] = useState([]);
+  const [stats, setStats] = useState({
+    savedListings: 0,
+    verifiedSellers: 0,
+    savedValue: 0,
+    activeInquiries: 0,
+  });
+
+  const [searchText, setSearchText] = useState("");
+  const [livestockType, setLivestockType] = useState("All Livestock");
+  const [status, setStatus] = useState("All Status");
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+
+  const defaultImage =
+    "https://images.unsplash.com/photo-1500595046743-cd271d694d30?q=80&w=1400&auto=format&fit=crop";
+
+  useEffect(() => {
+    fetchFavorites();
+  }, []);
+
+  useEffect(() => {
+    let results = [...savedListings];
+
+    if (searchText.trim() !== "") {
+      const search = searchText.toLowerCase();
+
+      results = results.filter(
+        (item) =>
+          item.breed?.toLowerCase().includes(search) ||
+          item.livestock_type?.toLowerCase().includes(search) ||
+          item.location?.toLowerCase().includes(search) ||
+          item.seller_name?.toLowerCase().includes(search)
+      );
+    }
+
+    if (livestockType !== "All Livestock") {
+      results = results.filter((item) => item.livestock_type === livestockType);
+    }
+
+    if (status !== "All Status") {
+      results = results.filter((item) => item.status === status);
+    }
+
+    setFilteredListings(results);
+  }, [searchText, livestockType, status, savedListings]);
+
+  const fetchFavorites = async () => {
+    try {
+      const token = localStorage.getItem("token");
+
+      if (!token) {
+        navigate("/login");
+        return;
+      }
+
+      const res = await fetch("http://localhost:5000/api/favorites", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setMessage(data.message || "Failed to load saved listings");
+        setLoading(false);
+        return;
+      }
+
+      setSavedListings(data.favorites);
+      setFilteredListings(data.favorites);
+      setStats(data.stats);
+      setLoading(false);
+    } catch (error) {
+      setMessage("Cannot connect to backend server");
+      setLoading(false);
+    }
+  };
+
+  const removeFavorite = async (listingId) => {
+    try {
+      const token = localStorage.getItem("token");
+
+      const res = await fetch(`http://localhost:5000/api/favorites/${listingId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.message || "Failed to remove favorite");
+        return;
+      }
+
+      setSavedListings((prev) => prev.filter((item) => item.id !== listingId));
+    } catch (error) {
+      alert("Cannot connect to backend server");
+    }
+  };
+
+  if (loading) {
+    return <h2 style={{ padding: "30px" }}>Loading saved listings...</h2>;
+  }
+
+  if (message) {
+    return <h2 style={{ padding: "30px", color: "red" }}>{message}</h2>;
+  }
 
   return (
     <div className="buyer-favorites-page">
@@ -76,19 +154,50 @@ function BuyerFavorites() {
       </div>
 
       <section className="favorites-stats">
-        <StatCard icon={<Heart />} value="9" label="Saved Listings" note="Your watchlist" />
-        <StatCard icon={<ShieldCheck />} value="7" label="Verified Sellers" note="MAO monitored" />
-        <StatCard icon={<Wallet />} value="₱55.5K" label="Saved Value" note="Total estimate" />
-        <StatCard icon={<TrendingUp />} value="3" label="Active Inquiries" note="From saved items" />
+        <StatCard
+          icon={<Heart />}
+          value={stats.savedListings}
+          label="Saved Listings"
+          note="Your watchlist"
+        />
+
+        <StatCard
+          icon={<ShieldCheck />}
+          value={stats.verifiedSellers}
+          label="Verified Sellers"
+          note="MAO monitored"
+        />
+
+        <StatCard
+          icon={<Wallet />}
+          value={`₱${Number(stats.savedValue).toLocaleString()}`}
+          label="Saved Value"
+          note="Total estimate"
+        />
+
+        <StatCard
+          icon={<TrendingUp />}
+          value={stats.activeInquiries}
+          label="Active Inquiries"
+          note="From saved items"
+        />
       </section>
 
       <section className="favorites-toolbar">
         <div className="favorites-search">
           <Search size={18} />
-          <input type="text" placeholder="Search saved livestock..." />
+          <input
+            type="text"
+            placeholder="Search saved livestock..."
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+          />
         </div>
 
-        <select>
+        <select
+          value={livestockType}
+          onChange={(e) => setLivestockType(e.target.value)}
+        >
           <option>All Livestock</option>
           <option>Swine</option>
           <option>Cattle</option>
@@ -96,89 +205,101 @@ function BuyerFavorites() {
           <option>Poultry</option>
         </select>
 
-        <select>
+        <select value={status} onChange={(e) => setStatus(e.target.value)}>
           <option>All Status</option>
           <option>Available</option>
           <option>Pending</option>
           <option>Sold</option>
         </select>
 
-        <button>
+        <button type="button">
           <Filter size={17} />
           Filter
         </button>
       </section>
 
       <section className="saved-grid">
-        {savedListings.map((item) => (
-          <div className="saved-card" key={item.id}>
-            <div className="saved-image">
-              <img src={item.image} alt={item.name} />
+        {filteredListings.length === 0 ? (
+          <h3>No saved livestock yet.</h3>
+        ) : (
+          filteredListings.map((item) => (
+            <div className="saved-card" key={item.id}>
+              <div className="saved-image">
+                <img src={item.image_url || defaultImage} alt={item.breed} />
 
-              <span className="saved-type">{item.type}</span>
+                <span className="saved-type">{item.livestock_type}</span>
 
-              <button className="remove-heart">
-                <Heart size={18} fill="currentColor" />
-              </button>
-            </div>
-
-            <div className="saved-body">
-              <div className="saved-title">
-                <div>
-                  <h3>{item.name}</h3>
-                  <p>{item.seller}</p>
-                </div>
-
-                <strong>₱{item.price.toLocaleString()}</strong>
-              </div>
-
-              <div className="saved-meta">
-                <div>
-                  <MapPin size={16} />
-                  <span>{item.location}</span>
-                </div>
-
-                <div>
-                  <Clock3 size={16} />
-                  <span>Saved {item.saved}</span>
-                </div>
-              </div>
-
-              <div className="saved-status-row">
-                <span
-                  className={
-                    item.status === "Available"
-                      ? "saved-status available"
-                      : "saved-status pending"
-                  }
+                <button
+                  className="remove-heart"
+                  type="button"
+                  onClick={() => removeFavorite(item.id)}
                 >
-                  {item.status}
-                </span>
-
-                <span className="verified-seller">
-                  <ShieldCheck size={14} />
-                  Verified seller
-                </span>
+                  <Heart size={18} fill="currentColor" />
+                </button>
               </div>
 
-              <div className="saved-actions">
-                <button className="view-btn">
-                  <Eye size={17} />
-                  View Details
-                </button>
+              <div className="saved-body">
+                <div className="saved-title">
+                  <div>
+                    <h3>{item.breed}</h3>
+                    <p>{item.seller_name}</p>
+                  </div>
 
-                <button className="message-btn">
-                  <MessageCircle size={17} />
-                  Inquire
-                </button>
+                  <strong>₱{Number(item.price).toLocaleString()}</strong>
+                </div>
 
-                <button className="delete-btn">
-                  <Trash2 size={17} />
-                </button>
+                <div className="saved-meta">
+                  <div>
+                    <MapPin size={16} />
+                    <span>{item.location}</span>
+                  </div>
+
+                  <div>
+                    <Clock3 size={16} />
+                    <span>Saved recently</span>
+                  </div>
+                </div>
+
+                <div className="saved-status-row">
+                  <span
+                    className={
+                      item.status === "Available"
+                        ? "saved-status available"
+                        : "saved-status pending"
+                    }
+                  >
+                    {item.status}
+                  </span>
+
+                  <span className="verified-seller">
+                    <ShieldCheck size={14} />
+                    Verified seller
+                  </span>
+                </div>
+
+                <div className="saved-actions">
+                  <button className="view-btn" type="button">
+                    <Eye size={17} />
+                    View Details
+                  </button>
+
+                  <button className="message-btn" type="button">
+                    <MessageCircle size={17} />
+                    Inquire
+                  </button>
+
+                  <button
+                    className="delete-btn"
+                    type="button"
+                    onClick={() => removeFavorite(item.id)}
+                  >
+                    <Trash2 size={17} />
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </section>
     </div>
   );

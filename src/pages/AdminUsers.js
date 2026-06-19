@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 import {
   ArrowLeft,
   Search,
@@ -8,67 +10,119 @@ import {
   UserX,
   Trash2,
   ShieldCheck,
-  Users,
   Tractor,
   ShoppingBag,
   Clock,
   MoreVertical,
 } from "lucide-react";
 
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import "./AdminUsers.css";
 
 function AdminUsers() {
-  const users = [
-    {
-      id: "USR-001",
-      name: "Almyr Belenson",
-      email: "almyr@email.com",
-      phone: "+63 912 345 6789",
-      role: "Farmer",
-      location: "Veruela, Agusan del Sur",
-      status: "Active",
-      verification: "Verified",
-      joined: "May 12, 2026",
-      listings: 12,
-    },
-    {
-      id: "USR-002",
-      name: "Maria Santos",
-      email: "maria@email.com",
-      phone: "+63 917 222 8841",
-      role: "Buyer",
-      location: "Veruela, Agusan del Sur",
-      status: "Active",
-      verification: "N/A",
-      joined: "May 15, 2026",
-      listings: 0,
-    },
-    {
-      id: "USR-003",
-      name: "Juan Dela Cruz",
-      email: "juan@email.com",
-      phone: "+63 919 888 1022",
-      role: "Farmer",
-      location: "Veruela, Agusan del Sur",
-      status: "Pending",
-      verification: "Pending",
-      joined: "May 18, 2026",
-      listings: 3,
-    },
-    {
-      id: "USR-004",
-      name: "Pedro Reyes",
-      email: "pedro@email.com",
-      phone: "+63 915 444 2210",
-      role: "Buyer",
-      location: "Veruela, Agusan del Sur",
-      status: "Inactive",
-      verification: "N/A",
-      joined: "May 20, 2026",
-      listings: 0,
-    },
-  ];
+  const navigate = useNavigate();
+
+  const [users, setUsers] = useState([]);
+  const [stats, setStats] = useState({
+    farmers: 0,
+    buyers: 0,
+    pendingVerification: 0,
+    verifiedRate: "0%",
+  });
+
+  const [verificationQueue, setVerificationQueue] = useState([]);
+  const [searchText, setSearchText] = useState("");
+  const [roleFilter, setRoleFilter] = useState("All Roles");
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+
+  const fetchUsers = async () => {
+    try {
+      const token = localStorage.getItem("token");
+
+      if (!token) {
+        navigate("/login");
+        return;
+      }
+
+      const res = await fetch("http://localhost:5000/api/admin/users", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setMessage(data.message || "Failed to load users");
+        setLoading(false);
+        return;
+      }
+
+      setUsers(data.users);
+      setStats(data.stats);
+      setVerificationQueue(data.verificationQueue);
+      setLoading(false);
+    } catch (error) {
+      setMessage("Cannot connect to backend server");
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const handleDelete = async (id) => {
+    const confirmDelete = window.confirm("Delete this user?");
+    if (!confirmDelete) return;
+
+    try {
+      const token = localStorage.getItem("token");
+
+      const res = await fetch(`http://localhost:5000/api/admin/users/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.message || "Failed to delete user");
+        return;
+      }
+
+      alert("User deleted successfully");
+      fetchUsers();
+    } catch (error) {
+      alert("Cannot connect to backend server");
+    }
+  };
+
+  const filteredUsers = users.filter((user) => {
+    const search = searchText.toLowerCase();
+
+    const matchesSearch =
+      user.full_name?.toLowerCase().includes(search) ||
+      user.email?.toLowerCase().includes(search) ||
+      String(user.id).includes(search);
+
+    const matchesRole =
+      roleFilter === "All Roles" ||
+      user.role.toLowerCase() === roleFilter.toLowerCase();
+
+    return matchesSearch && matchesRole;
+  });
+
+  if (loading) {
+    return <h2 style={{ padding: "30px" }}>Loading users...</h2>;
+  }
+
+  if (message) {
+    return <h2 style={{ padding: "30px", color: "red" }}>{message}</h2>;
+  }
 
   return (
     <div className="enterprise-users-page">
@@ -88,7 +142,7 @@ function AdminUsers() {
           </div>
         </div>
 
-        <button className="export-btn">
+        <button className="export-btn" type="button">
           <Download size={18} />
           Export Users
         </button>
@@ -97,28 +151,28 @@ function AdminUsers() {
       <section className="user-kpi-grid">
         <KpiCard
           icon={<Tractor size={24} />}
-          value="74"
+          value={stats.farmers}
           label="Registered Farmers"
-          note="+8 this month"
+          note="Total farmer accounts"
         />
 
         <KpiCard
           icon={<ShoppingBag size={24} />}
-          value="54"
+          value={stats.buyers}
           label="Registered Buyers"
-          note="+4 this month"
+          note="Total buyer accounts"
         />
 
         <KpiCard
           icon={<Clock size={24} />}
-          value="11"
+          value={stats.pendingVerification}
           label="Pending Verification"
           note="Requires MAO review"
         />
 
         <KpiCard
           icon={<ShieldCheck size={24} />}
-          value="96%"
+          value={stats.verifiedRate}
           label="Verified Accounts"
           note="Account quality rate"
         />
@@ -134,10 +188,15 @@ function AdminUsers() {
           <div className="toolbar-actions">
             <div className="search-control">
               <Search size={18} />
-              <input type="text" placeholder="Search name, email, or ID..." />
+              <input
+                type="text"
+                placeholder="Search name, email, or ID..."
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+              />
             </div>
 
-            <button className="filter-btn">
+            <button className="filter-btn" type="button">
               <Filter size={18} />
               Filters
             </button>
@@ -145,7 +204,7 @@ function AdminUsers() {
         </div>
 
         <div className="filter-row">
-          <select>
+          <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
             <option>All Roles</option>
             <option>Farmer</option>
             <option>Buyer</option>
@@ -154,15 +213,11 @@ function AdminUsers() {
           <select>
             <option>All Account Status</option>
             <option>Active</option>
-            <option>Inactive</option>
-            <option>Pending</option>
           </select>
 
           <select>
             <option>All Verification</option>
             <option>Verified</option>
-            <option>Pending</option>
-            <option>N/A</option>
           </select>
         </div>
 
@@ -182,92 +237,89 @@ function AdminUsers() {
             </thead>
 
             <tbody>
-              {users.map((user) => (
-                <tr key={user.id}>
-                  <td>
-                    <div className="user-cell">
-                      <div className="avatar">
-                        {user.name.charAt(0)}
-                      </div>
-
-                      <div>
-                        <strong>{user.name}</strong>
-                        <p>{user.id} • {user.location}</p>
-                      </div>
-                    </div>
-                  </td>
-
-                  <td>
-                    <div className="contact-cell">
-                      <strong>{user.email}</strong>
-                      <p>{user.phone}</p>
-                    </div>
-                  </td>
-
-                  <td>
-                    <span className={`role-pill ${user.role.toLowerCase()}`}>
-                      {user.role === "Farmer" ? (
-                        <Tractor size={14} />
-                      ) : (
-                        <ShoppingBag size={14} />
-                      )}
-                      {user.role}
-                    </span>
-                  </td>
-
-                  <td>
-                    <span className={`status-pill ${user.status.toLowerCase()}`}>
-                      {user.status}
-                    </span>
-                  </td>
-
-                  <td>
-                    <span
-                      className={`verification-pill ${
-                        user.verification === "Verified"
-                          ? "verified"
-                          : user.verification === "Pending"
-                          ? "pending"
-                          : "neutral"
-                      }`}
-                    >
-                      {user.verification}
-                    </span>
-                  </td>
-
-                  <td>
-                    <strong className="listing-count">
-                      {user.listings}
-                    </strong>
-                  </td>
-
-                  <td>{user.joined}</td>
-
-                  <td>
-                    <div className="table-actions">
-                      <button title="View Details">
-                        <Eye size={17} />
-                      </button>
-
-                      <button title="Verify Farmer">
-                        <UserCheck size={17} />
-                      </button>
-
-                      <button title="Deactivate Account">
-                        <UserX size={17} />
-                      </button>
-
-                      <button className="danger" title="Delete User">
-                        <Trash2 size={17} />
-                      </button>
-
-                      <button title="More Options">
-                        <MoreVertical size={17} />
-                      </button>
-                    </div>
-                  </td>
+              {filteredUsers.length === 0 ? (
+                <tr>
+                  <td colSpan="8">No users found.</td>
                 </tr>
-              ))}
+              ) : (
+                filteredUsers.map((user) => (
+                  <tr key={user.id}>
+                    <td>
+                      <div className="user-cell">
+                        <div className="avatar">{user.full_name.charAt(0)}</div>
+
+                        <div>
+                          <strong>{user.full_name}</strong>
+                          <p>USR-{user.id} • {user.location}</p>
+                        </div>
+                      </div>
+                    </td>
+
+                    <td>
+                      <div className="contact-cell">
+                        <strong>{user.email}</strong>
+                        <p>{user.phone}</p>
+                      </div>
+                    </td>
+
+                    <td>
+                      <span className={`role-pill ${user.role}`}>
+                        {user.role === "farmer" ? (
+                          <Tractor size={14} />
+                        ) : (
+                          <ShoppingBag size={14} />
+                        )}
+                        {user.role}
+                      </span>
+                    </td>
+
+                    <td>
+                      <span className="status-pill active">Active</span>
+                    </td>
+
+                    <td>
+                      <span className="verification-pill verified">
+                        {user.role === "farmer" ? "Verified" : "N/A"}
+                      </span>
+                    </td>
+
+                    <td>
+                      <strong className="listing-count">{user.listings}</strong>
+                    </td>
+
+                    <td>{new Date(user.created_at).toLocaleDateString()}</td>
+
+                    <td>
+                      <div className="table-actions">
+                        <button title="View Details" type="button">
+                          <Eye size={17} />
+                        </button>
+
+                        <button title="Verify Farmer" type="button">
+                          <UserCheck size={17} />
+                        </button>
+
+                        <button title="Deactivate Account" type="button">
+                          <UserX size={17} />
+                        </button>
+
+                        <button
+                          className="danger"
+                          title="Delete User"
+                          type="button"
+                          onClick={() => handleDelete(user.id)}
+                        >
+                          <Trash2 size={17} />
+                        </button>
+
+                        <button title="More Options" type="button">
+                          <MoreVertical size={17} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -283,20 +335,19 @@ function AdminUsers() {
         </div>
 
         <div className="queue-list">
-          <div>
-            <strong>Juan Dela Cruz</strong>
-            <span>Pending farmer verification</span>
-          </div>
-
-          <div>
-            <strong>Ramon Garcia</strong>
-            <span>Missing valid ID / farm location</span>
-          </div>
-
-          <div>
-            <strong>Lito Manalo</strong>
-            <span>Needs MAO profile confirmation</span>
-          </div>
+          {verificationQueue.length === 0 ? (
+            <div>
+              <strong>No farmers yet</strong>
+              <span>No verification records available.</span>
+            </div>
+          ) : (
+            verificationQueue.slice(0, 3).map((user) => (
+              <div key={user.id}>
+                <strong>{user.full_name}</strong>
+                <span>{user.farm_location || "Farm location not provided"}</span>
+              </div>
+            ))
+          )}
         </div>
       </section>
     </div>
@@ -306,9 +357,7 @@ function AdminUsers() {
 function KpiCard({ icon, value, label, note }) {
   return (
     <div className="user-kpi-card">
-      <div className="kpi-icon">
-        {icon}
-      </div>
+      <div className="kpi-icon">{icon}</div>
 
       <h2>{value}</h2>
       <p>{label}</p>

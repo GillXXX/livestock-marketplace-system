@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 import {
   ArrowLeft,
   Search,
@@ -16,42 +18,101 @@ import {
   TrendingUp,
 } from "lucide-react";
 
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import "./BuyerTransactions.css";
 
 function BuyerTransactions() {
-  const transactions = [
-    {
-      id: "TRX-001",
-      livestock: "Large White Swine",
-      seller: "Almyr Belenson",
-      location: "Poblacion, Veruela",
-      price: "₱12,000",
-      date: "May 20, 2026",
-      stage: "Negotiation",
-      status: "Pending",
-    },
-    {
-      id: "TRX-002",
-      livestock: "Boer Goat",
-      seller: "Juan Dela Cruz",
-      location: "Sinobong, Veruela",
-      price: "₱8,500",
-      date: "May 18, 2026",
-      stage: "Completed",
-      status: "Completed",
-    },
-    {
-      id: "TRX-003",
-      livestock: "Brahman Cattle",
-      seller: "Mario Santos",
-      location: "La Fortuna, Veruela",
-      price: "₱35,000",
-      date: "May 15, 2026",
-      stage: "Verification",
-      status: "Verification",
-    },
-  ];
+  const navigate = useNavigate();
+
+  const [transactions, setTransactions] = useState([]);
+  const [filteredTransactions, setFilteredTransactions] = useState([]);
+  const [stats, setStats] = useState({
+    totalTransactions: 0,
+    pendingDeals: 0,
+    completed: 0,
+    purchaseValue: 0,
+  });
+
+  const [searchText, setSearchText] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All Status");
+  const [typeFilter, setTypeFilter] = useState("All Livestock");
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      try {
+        const token = localStorage.getItem("token");
+
+        if (!token) {
+          navigate("/login");
+          return;
+        }
+
+        const res = await fetch("http://localhost:5000/api/buyer-transactions", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          setMessage(data.message || "Failed to load transactions");
+          setLoading(false);
+          return;
+        }
+
+        setTransactions(data.transactions);
+        setFilteredTransactions(data.transactions);
+        setStats(data.stats);
+        setLoading(false);
+      } catch (error) {
+        setMessage("Cannot connect to backend server");
+        setLoading(false);
+      }
+    };
+
+    fetchTransactions();
+  }, [navigate]);
+
+  useEffect(() => {
+    let results = [...transactions];
+
+    if (searchText.trim() !== "") {
+      const search = searchText.toLowerCase();
+
+      results = results.filter(
+        (item) =>
+          item.breed?.toLowerCase().includes(search) ||
+          item.livestock_type?.toLowerCase().includes(search) ||
+          item.seller_name?.toLowerCase().includes(search) ||
+          item.location?.toLowerCase().includes(search)
+      );
+    }
+
+    if (statusFilter !== "All Status") {
+      results = results.filter(
+        (item) =>
+          item.status === statusFilter ||
+          item.workflow_step === statusFilter
+      );
+    }
+
+    if (typeFilter !== "All Livestock") {
+      results = results.filter((item) => item.livestock_type === typeFilter);
+    }
+
+    setFilteredTransactions(results);
+  }, [searchText, statusFilter, typeFilter, transactions]);
+
+  if (loading) {
+    return <h2 style={{ padding: "30px" }}>Loading transactions...</h2>;
+  }
+
+  if (message) {
+    return <h2 style={{ padding: "30px", color: "red" }}>{message}</h2>;
+  }
 
   return (
     <div className="buyer-transactions-page">
@@ -73,19 +134,48 @@ function BuyerTransactions() {
       </header>
 
       <section className="transaction-stats">
-        <StatCard icon={<FileCheck2 />} value="8" label="Total Transactions" note="All purchase records" />
-        <StatCard icon={<Clock />} value="3" label="Pending Deals" note="Awaiting seller action" />
-        <StatCard icon={<CheckCircle />} value="4" label="Completed" note="Recorded purchases" />
-        <StatCard icon={<Wallet />} value="₱55.5K" label="Purchase Value" note="Total estimated value" />
+        <StatCard
+          icon={<FileCheck2 />}
+          value={stats.totalTransactions}
+          label="Total Transactions"
+          note="All purchase records"
+        />
+
+        <StatCard
+          icon={<Clock />}
+          value={stats.pendingDeals}
+          label="Pending Deals"
+          note="Awaiting seller action"
+        />
+
+        <StatCard
+          icon={<CheckCircle />}
+          value={stats.completed}
+          label="Completed"
+          note="Recorded purchases"
+        />
+
+        <StatCard
+          icon={<Wallet />}
+          value={`₱${Number(stats.purchaseValue).toLocaleString()}`}
+          label="Purchase Value"
+          note="Total estimated value"
+        />
       </section>
 
       <section className="transaction-toolbar">
         <div className="transaction-search">
           <Search size={18} />
-          <input type="text" placeholder="Search transaction, seller, livestock..." />
+
+          <input
+            type="text"
+            placeholder="Search transaction, seller, livestock..."
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+          />
         </div>
 
-        <select>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option>All Status</option>
           <option>Pending</option>
           <option>Verification</option>
@@ -93,7 +183,7 @@ function BuyerTransactions() {
           <option>Flagged</option>
         </select>
 
-        <select>
+        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
           <option>All Livestock</option>
           <option>Swine</option>
           <option>Cattle</option>
@@ -101,7 +191,7 @@ function BuyerTransactions() {
           <option>Poultry</option>
         </select>
 
-        <button>
+        <button type="button">
           <Filter size={17} />
           Filter
         </button>
@@ -115,107 +205,111 @@ function BuyerTransactions() {
               <p>Monitor every livestock deal through the structured workflow.</p>
             </div>
 
-            <button className="export-btn">
+            <button className="export-btn" type="button">
               <Download size={17} />
               Export
             </button>
           </div>
 
           <div className="transaction-list">
-            {transactions.map((item) => (
-              <div className="premium-transaction-card" key={item.id}>
-                <div className="transaction-top">
-                  <div className="transaction-left">
-                    <div className="transaction-icon-box">
-                      <FileCheck2 size={24} />
-                    </div>
-
-                    <div>
-                      <div className="transaction-heading">
-                        <h3>{item.livestock}</h3>
-
-                        <span className="transaction-id">
-                          {item.id}
-                        </span>
+            {filteredTransactions.length === 0 ? (
+              <p>No transactions found.</p>
+            ) : (
+              filteredTransactions.map((item) => (
+                <div className="premium-transaction-card" key={item.id}>
+                  <div className="transaction-top">
+                    <div className="transaction-left">
+                      <div className="transaction-icon-box">
+                        <FileCheck2 size={24} />
                       </div>
 
-                      <p className="seller-name">
-                        Seller: {item.seller}
-                      </p>
+                      <div>
+                        <div className="transaction-heading">
+                          <h3>{item.breed || item.livestock_type}</h3>
 
-                      <div className="transaction-meta">
-                        <span>
-                          <MapPin size={14} />
-                          {item.location}
-                        </span>
+                          <span className="transaction-id">
+                            TRX-{String(item.id).padStart(3, "0")}
+                          </span>
+                        </div>
 
-                        <span>
-                          <Calendar size={14} />
-                          {item.date}
-                        </span>
+                        <p className="seller-name">
+                          Seller: {item.seller_name}
+                        </p>
+
+                        <div className="transaction-meta">
+                          <span>
+                            <MapPin size={14} />
+                            {item.location}
+                          </span>
+
+                          <span>
+                            <Calendar size={14} />
+                            {new Date(item.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="transaction-right">
-                    <strong>{item.price}</strong>
+                    <div className="transaction-right">
+                      <strong>₱{Number(item.amount).toLocaleString()}</strong>
 
-                    <span
-                      className={
-                        item.status === "Completed"
-                          ? "premium-status completed"
-                          : item.status === "Verification"
-                          ? "premium-status verification"
-                          : "premium-status pending"
-                      }
-                    >
-                      {item.status}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="transaction-center">
-                  <div className="workflow-wrapper">
-                    <div className="workflow-header">
-                      <h4>Transaction Workflow</h4>
-                      <p>Current Stage: {item.stage}</p>
-                    </div>
-
-                    <Workflow stage={item.stage} />
-                  </div>
-                </div>
-
-                <div className="transaction-footer">
-                  <div className="transaction-info-box">
-                    <ShieldCheck size={18} />
-
-                    <div>
-                      <strong>MAO Verified Transaction</strong>
-                      <p>
-                        Livestock documents and seller credentials are validated
-                        before final confirmation.
-                      </p>
+                      <span
+                        className={
+                          item.status === "Completed"
+                            ? "premium-status completed"
+                            : item.workflow_step === "Verification"
+                            ? "premium-status verification"
+                            : "premium-status pending"
+                        }
+                      >
+                        {item.status === "Completed" ? "Completed" : item.workflow_step}
+                      </span>
                     </div>
                   </div>
 
-                  <div className="premium-actions">
-                    <button className="view-btn-premium">
-                      <Eye size={17} />
-                      View Details
-                    </button>
+                  <div className="transaction-center">
+                    <div className="workflow-wrapper">
+                      <div className="workflow-header">
+                        <h4>Transaction Workflow</h4>
+                        <p>Current Stage: {item.workflow_step}</p>
+                      </div>
 
-                    <button className="message-btn-premium">
-                      <MessageCircle size={17} />
-                      Contact Seller
-                    </button>
+                      <Workflow stage={item.workflow_step} />
+                    </div>
+                  </div>
 
-                    <button className="download-btn-premium">
-                      <Download size={17} />
-                    </button>
+                  <div className="transaction-footer">
+                    <div className="transaction-info-box">
+                      <ShieldCheck size={18} />
+
+                      <div>
+                        <strong>MAO Verified Transaction</strong>
+                        <p>
+                          Livestock documents and seller credentials are validated
+                          before final confirmation.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="premium-actions">
+                      <button className="view-btn-premium" type="button">
+                        <Eye size={17} />
+                        View Details
+                      </button>
+
+                      <button className="message-btn-premium" type="button">
+                        <MessageCircle size={17} />
+                        Contact Seller
+                      </button>
+
+                      <button className="download-btn-premium" type="button">
+                        <Download size={17} />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 

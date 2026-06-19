@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   Bell,
@@ -22,45 +22,72 @@ import {
   Eye,
 } from "lucide-react";
 
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import "./BuyerDashboard.css";
 
 function BuyerDashboard() {
+  const navigate = useNavigate();
+
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [dashboardData, setDashboardData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
 
-  const recommended = [
-    {
-      id: 1,
-      name: "Large White Swine",
-      type: "Swine",
-      price: "₱12,000",
-      location: "Poblacion, Veruela",
-      seller: "Almyr Belenson",
-      image:
-        "https://images.unsplash.com/photo-1516467508483-a7212febe31a?q=80&w=1400&auto=format&fit=crop",
-    },
-    {
-      id: 2,
-      name: "Boer Goat",
-      type: "Goat",
-      price: "₱8,500",
-      location: "Sinobong, Veruela",
-      seller: "Juan Dela Cruz",
-      image:
-        "https://images.unsplash.com/photo-1524024973431-2ad916746881?q=80&w=1400&auto=format&fit=crop",
-    },
-    {
-      id: 3,
-      name: "Brahman Cattle",
-      type: "Cattle",
-      price: "₱35,000",
-      location: "La Fortuna, Veruela",
-      seller: "Mario Santos",
-      image:
-        "https://images.unsplash.com/photo-1500595046743-cd271d694d30?q=80&w=1400&auto=format&fit=crop",
-    },
-  ];
+  const defaultImage =
+    "https://images.unsplash.com/photo-1500595046743-cd271d694d30?q=80&w=1400&auto=format&fit=crop";
+
+  useEffect(() => {
+    const fetchBuyerDashboard = async () => {
+      try {
+        const token = localStorage.getItem("token");
+
+        if (!token) {
+          navigate("/login");
+          return;
+        }
+
+        const res = await fetch("http://localhost:5000/api/buyer/dashboard", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          setMessage(data.message || "Failed to load buyer dashboard");
+          setLoading(false);
+          return;
+        }
+
+        setDashboardData(data);
+        setLoading(false);
+      } catch (error) {
+        setMessage("Cannot connect to backend server");
+        setLoading(false);
+      }
+    };
+
+    fetchBuyerDashboard();
+  }, [navigate]);
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    navigate("/login");
+  };
+
+  if (loading) {
+    return <h2 style={{ padding: "30px" }}>Loading buyer dashboard...</h2>;
+  }
+
+  if (message) {
+    return <h2 style={{ padding: "30px", color: "red" }}>{message}</h2>;
+  }
+
+  const buyerName = dashboardData?.user?.full_name || "Buyer Account";
+  const firstLetter = buyerName.charAt(0).toUpperCase();
 
   return (
     <div className="buyer-shell">
@@ -107,7 +134,7 @@ function BuyerDashboard() {
             <span>Map Explorer</span>
           </Link>
 
-          <Link to="/profile">
+          <Link to="/buyer-profile">
             <User size={20} />
             <span>Profile</span>
           </Link>
@@ -124,10 +151,10 @@ function BuyerDashboard() {
           <span>Ready to inquire</span>
         </div>
 
-        <Link className="buyer-logout" to="/login">
+        <button className="buyer-logout" onClick={handleLogout}>
           <LogOut size={20} />
           <span>Logout</span>
-        </Link>
+        </button>
       </aside>
 
       <main className="buyer-main">
@@ -166,31 +193,33 @@ function BuyerDashboard() {
                 <div className="notification-dropdown">
                   <h4>Notifications</h4>
 
-                  <div className="notification-item unread">
-                    <strong>Seller replied</strong>
-                    <p>Almyr responded to your Swine inquiry.</p>
-                    <small>2 mins ago</small>
-                  </div>
-
-                  <div className="notification-item">
-                    <strong>New nearby listing</strong>
-                    <p>A new goat listing was posted in Veruela.</p>
-                    <small>Today</small>
-                  </div>
-
-                  <div className="notification-item">
-                    <strong>Price update</strong>
-                    <p>Brahman cattle listing price was updated.</p>
-                    <small>Yesterday</small>
-                  </div>
+                  {dashboardData.activity.length === 0 ? (
+                    <div className="notification-item">
+                      <strong>No notifications</strong>
+                      <p>No marketplace updates yet.</p>
+                    </div>
+                  ) : (
+                    dashboardData.activity.slice(0, 3).map((item, index) => (
+                      <div
+                        className={index === 0 ? "notification-item unread" : "notification-item"}
+                        key={index}
+                      >
+                        <strong>New listing available</strong>
+                        <p>
+                          {item.breed} posted in {item.location}.
+                        </p>
+                        <small>Recently</small>
+                      </div>
+                    ))
+                  )}
                 </div>
               )}
             </div>
 
             <div className="buyer-profile-chip">
-              <div className="profile-avatar">B</div>
+              <div className="profile-avatar">{firstLetter}</div>
               <div>
-                <strong>Buyer Account</strong>
+                <strong>{buyerName}</strong>
                 <p>Verified Buyer</p>
               </div>
             </div>
@@ -219,16 +248,39 @@ function BuyerDashboard() {
           </div>
 
           <div className="hero-highlight">
-            <strong>56</strong>
+            <strong>{dashboardData.stats.availableListings}</strong>
             <span>Available listings</span>
           </div>
         </section>
 
         <section className="buyer-kpi-grid">
-          <KpiCard icon={<Heart />} value="9" label="Saved Listings" note="Your favorites" />
-          <KpiCard icon={<MessageCircle />} value="5" label="Active Inquiries" note="2 awaiting reply" />
-          <KpiCard icon={<ShoppingBag />} value="3" label="Completed Purchases" note="Transaction history" />
-          <KpiCard icon={<MapPin />} value="23" label="Nearby Sellers" note="Within Veruela" />
+          <KpiCard
+            icon={<Heart />}
+            value={dashboardData.stats.savedListings}
+            label="Saved Listings"
+            note="Your favorites"
+          />
+
+          <KpiCard
+            icon={<MessageCircle />}
+            value={dashboardData.stats.activeInquiries}
+            label="Active Inquiries"
+            note="Seller conversations"
+          />
+
+          <KpiCard
+            icon={<ShoppingBag />}
+            value={dashboardData.stats.completedPurchases}
+            label="Completed Purchases"
+            note="Transaction history"
+          />
+
+          <KpiCard
+            icon={<MapPin />}
+            value={dashboardData.stats.nearbySellers}
+            label="Nearby Sellers"
+            note="Available livestock posts"
+          />
         </section>
 
         <section className="buyer-content-grid">
@@ -236,52 +288,56 @@ function BuyerDashboard() {
             <div className="panel-header">
               <div>
                 <h3>Recommended Livestock</h3>
-                <p>Listings matched based on your recent marketplace activity.</p>
+                <p>Latest available listings from the marketplace.</p>
               </div>
 
               <Link to="/marketplace">View all</Link>
             </div>
 
             <div className="recommended-grid">
-              {recommended.map((item) => (
-                <div className="recommended-card" key={item.id}>
-                  <div className="recommended-image">
-                    <img src={item.image} alt={item.name} />
-                    <span>{item.type}</span>
-                    <button>
-                      <Heart size={17} />
-                    </button>
-                  </div>
+              {dashboardData.recommended.length === 0 ? (
+                <p>No available livestock listings yet.</p>
+              ) : (
+                dashboardData.recommended.map((item) => (
+                  <div className="recommended-card" key={item.id}>
+                    <div className="recommended-image">
+                      <img src={item.image_url || defaultImage} alt={item.breed} />
+                      <span>{item.livestock_type}</span>
+                      <button>
+                        <Heart size={17} />
+                      </button>
+                    </div>
 
-                  <div className="recommended-body">
-                    <div className="recommended-title">
-                      <div>
-                        <h4>{item.name}</h4>
-                        <p>{item.seller}</p>
+                    <div className="recommended-body">
+                      <div className="recommended-title">
+                        <div>
+                          <h4>{item.breed}</h4>
+                          <p>{item.seller_name}</p>
+                        </div>
+
+                        <strong>₱{Number(item.price).toLocaleString()}</strong>
                       </div>
 
-                      <strong>{item.price}</strong>
-                    </div>
+                      <div className="recommended-location">
+                        <MapPin size={15} />
+                        {item.location} • {item.age}
+                      </div>
 
-                    <div className="recommended-location">
-                      <MapPin size={15} />
-                      {item.location}
-                    </div>
+                      <div className="recommended-actions">
+                        <button>
+                          <Eye size={16} />
+                          View Details
+                        </button>
 
-                    <div className="recommended-actions">
-                      <button>
-                        <Eye size={16} />
-                        View Details
-                      </button>
-
-                      <button className="inquire">
-                        <MessageCircle size={16} />
-                        Inquire
-                      </button>
+                        <button className="inquire">
+                          <MessageCircle size={16} />
+                          Inquire
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
 
@@ -293,26 +349,27 @@ function BuyerDashboard() {
               </div>
             </div>
 
-            <InquiryItem
-              icon={<Clock />}
-              title="Swine Listing"
-              text="Waiting for seller response"
-              status="Pending"
-            />
-
-            <InquiryItem
-              icon={<ShieldCheck />}
-              title="Goat Listing"
-              text="Seller confirmed availability"
-              status="Confirmed"
-            />
-
-            <InquiryItem
-              icon={<MessageCircle />}
-              title="Cattle Listing"
-              text="Negotiation in progress"
-              status="Negotiation"
-            />
+            {dashboardData.recentInquiries.length === 0 ? (
+              <p>No inquiries yet.</p>
+            ) : (
+              dashboardData.recentInquiries.map((item, index) => (
+                <InquiryItem
+                  key={index}
+                  icon={
+                    item.status === "Completed" ? (
+                      <ShieldCheck />
+                    ) : item.status === "Negotiation" ? (
+                      <MessageCircle />
+                    ) : (
+                      <Clock />
+                    )
+                  }
+                  title={item.breed || item.livestock_type}
+                  text={`${item.livestock_type} inquiry update`}
+                  status={item.status}
+                />
+              ))
+            )}
           </aside>
         </section>
 
@@ -325,9 +382,17 @@ function BuyerDashboard() {
               </div>
             </div>
 
-            <ActivityItem title="New swine listing posted" text="Poblacion, Veruela • ₱12,000" />
-            <ActivityItem title="Goat listing price updated" text="Sinobong, Veruela • ₱8,500" />
-            <ActivityItem title="New cattle listing available" text="La Fortuna, Veruela • ₱35,000" />
+            {dashboardData.activity.length === 0 ? (
+              <p>No marketplace activity yet.</p>
+            ) : (
+              dashboardData.activity.map((item, index) => (
+                <ActivityItem
+                  key={index}
+                  title={`New ${item.livestock_type} listing posted`}
+                  text={`${item.location} • ₱${Number(item.price).toLocaleString()}`}
+                />
+              ))
+            )}
           </div>
 
           <div className="buyer-panel">
@@ -347,7 +412,7 @@ function BuyerDashboard() {
 
               <div className="map-label">
                 <strong>Veruela, Agusan del Sur</strong>
-                <p>23 mapped livestock sellers</p>
+                <p>{dashboardData.stats.nearbySellers} mapped livestock sellers</p>
               </div>
             </div>
           </div>

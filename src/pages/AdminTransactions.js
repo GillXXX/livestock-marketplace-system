@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 import {
   Search,
   Eye,
@@ -13,42 +15,118 @@ import {
   TrendingUp,
 } from "lucide-react";
 
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import "./AdminTransactions.css";
 
 function AdminTransactions() {
-  const transactions = [
-    {
-      id: "TRX-001",
-      livestock: "Swine",
-      seller: "Almyr Belenson",
-      buyer: "Pedro Reyes",
-      amount: "₱12,000",
-      date: "May 20, 2026",
-      stage: "Completed",
-      status: "Completed",
-    },
-    {
-      id: "TRX-002",
-      livestock: "Goat",
-      seller: "Juan Dela Cruz",
-      buyer: "Maria Santos",
-      amount: "₱8,500",
-      date: "May 21, 2026",
-      stage: "Verification",
-      status: "Pending",
-    },
-    {
-      id: "TRX-003",
-      livestock: "Cattle",
-      seller: "Mario Santos",
-      buyer: "Jose Lim",
-      amount: "₱35,000",
-      date: "May 22, 2026",
-      stage: "Negotiation",
-      status: "Flagged",
-    },
-  ];
+  const navigate = useNavigate();
+
+  const [transactions, setTransactions] = useState([]);
+  const [stats, setStats] = useState({
+    completed: 0,
+    pending: 0,
+    flagged: 0,
+    tradeValue: 0,
+  });
+
+  const [searchText, setSearchText] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All Status");
+  const [livestockFilter, setLivestockFilter] = useState("All Livestock");
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+
+  const fetchTransactions = async () => {
+    try {
+      const token = localStorage.getItem("token");
+
+      if (!token) {
+        navigate("/login");
+        return;
+      }
+
+      const res = await fetch("http://localhost:5000/api/admin/transactions", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setMessage(data.message || "Failed to load transactions");
+        setLoading(false);
+        return;
+      }
+
+      setTransactions(data.transactions);
+      setStats(data.stats);
+      setLoading(false);
+    } catch (error) {
+      setMessage("Cannot connect to backend server");
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTransactions();
+  }, []);
+
+  const updateStatus = async (id, status) => {
+    try {
+      const token = localStorage.getItem("token");
+
+      const res = await fetch(
+        `http://localhost:5000/api/admin/transactions/${id}/status`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ status }),
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.message || "Failed to update transaction");
+        return;
+      }
+
+      fetchTransactions();
+    } catch (error) {
+      alert("Cannot connect to backend server");
+    }
+  };
+
+  const filteredTransactions = transactions.filter((trx) => {
+    const search = searchText.toLowerCase();
+
+    const matchesSearch =
+      trx.id?.toString().includes(search) ||
+      trx.livestock_type?.toLowerCase().includes(search) ||
+      trx.breed?.toLowerCase().includes(search) ||
+      trx.seller_name?.toLowerCase().includes(search) ||
+      trx.buyer_name?.toLowerCase().includes(search);
+
+    const matchesStatus =
+      statusFilter === "All Status" || trx.status === statusFilter;
+
+    const matchesLivestock =
+      livestockFilter === "All Livestock" ||
+      trx.livestock_type === livestockFilter;
+
+    return matchesSearch && matchesStatus && matchesLivestock;
+  });
+
+  if (loading) {
+    return <h2 style={{ padding: "30px" }}>Loading transactions...</h2>;
+  }
+
+  if (message) {
+    return <h2 style={{ padding: "30px", color: "red" }}>{message}</h2>;
+  }
 
   return (
     <div className="admin-transactions-page">
@@ -68,17 +146,40 @@ function AdminTransactions() {
           </div>
         </div>
 
-        <button className="export-btn">
+        <button className="export-btn" type="button">
           <Download size={18} />
           Export Report
         </button>
       </header>
 
       <section className="transaction-stats">
-        <StatCard icon={<FileCheck2 />} value="34" label="Completed" trend="+18% this month" />
-        <StatCard icon={<Clock />} value="12" label="Pending" trend="Awaiting verification" />
-        <StatCard icon={<AlertTriangle />} value="3" label="Flagged" trend="Needs MAO review" />
-        <StatCard icon={<TrendingUp />} value="₱245K" label="Trade Value" trend="Recorded sales" />
+        <StatCard
+          icon={<FileCheck2 />}
+          value={stats.completed}
+          label="Completed"
+          trend="Completed transactions"
+        />
+
+        <StatCard
+          icon={<Clock />}
+          value={stats.pending}
+          label="Pending"
+          trend="Awaiting verification"
+        />
+
+        <StatCard
+          icon={<AlertTriangle />}
+          value={stats.flagged}
+          label="Flagged"
+          trend="Needs MAO review"
+        />
+
+        <StatCard
+          icon={<TrendingUp />}
+          value={`₱${Number(stats.tradeValue).toLocaleString()}`}
+          label="Trade Value"
+          trend="Recorded sales"
+        />
       </section>
 
       <section className="workflow-overview">
@@ -99,17 +200,28 @@ function AdminTransactions() {
       <section className="transaction-toolbar">
         <div className="transaction-search">
           <Search size={18} />
-          <input placeholder="Search transaction, buyer, seller..." />
+
+          <input
+            placeholder="Search transaction, buyer, seller..."
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+          />
         </div>
 
-        <select>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+        >
           <option>All Status</option>
           <option>Completed</option>
           <option>Pending</option>
           <option>Flagged</option>
         </select>
 
-        <select>
+        <select
+          value={livestockFilter}
+          onChange={(e) => setLivestockFilter(e.target.value)}
+        >
           <option>All Livestock</option>
           <option>Swine</option>
           <option>Cattle</option>
@@ -117,7 +229,7 @@ function AdminTransactions() {
           <option>Poultry</option>
         </select>
 
-        <button className="date-btn">
+        <button className="date-btn" type="button">
           <Calendar size={17} />
           Date Filter
         </button>
@@ -149,56 +261,77 @@ function AdminTransactions() {
             </thead>
 
             <tbody>
-              {transactions.map((trx) => (
-                <tr key={trx.id}>
-                  <td>
-                    <strong>{trx.id}</strong>
-                    <small>Marketplace trade</small>
-                  </td>
-
-                  <td>{trx.livestock}</td>
-
-                  <td>
-                    <strong>{trx.seller}</strong>
-                    <small>Buyer: {trx.buyer}</small>
-                  </td>
-
-                  <td className="amount">{trx.amount}</td>
-
-                  <td>{trx.date}</td>
-
-                  <td>
-                    <Workflow stage={trx.stage} />
-                    <small className="stage-label">{trx.stage}</small>
-                  </td>
-
-                  <td>
-                    <span className={`trx-status ${trx.status.toLowerCase()}`}>
-                      {trx.status}
-                    </span>
-                  </td>
-
-                  <td>
-                    <div className="transaction-actions">
-                      <button title="View">
-                        <Eye size={17} />
-                      </button>
-
-                      <button title="Approve">
-                        <CheckCircle size={17} />
-                      </button>
-
-                      <button title="Flag">
-                        <Flag size={17} />
-                      </button>
-
-                      <button className="danger" title="Issue">
-                        <AlertTriangle size={17} />
-                      </button>
-                    </div>
-                  </td>
+              {filteredTransactions.length === 0 ? (
+                <tr>
+                  <td colSpan="8">No transaction records found.</td>
                 </tr>
-              ))}
+              ) : (
+                filteredTransactions.map((trx) => (
+                  <tr key={trx.id}>
+                    <td>
+                      <strong>TRX-{trx.id}</strong>
+                      <small>Marketplace trade</small>
+                    </td>
+
+                    <td>{trx.livestock_type}</td>
+
+                    <td>
+                      <strong>{trx.seller_name}</strong>
+                      <small>Buyer: {trx.buyer_name}</small>
+                    </td>
+
+                    <td className="amount">
+                      ₱{Number(trx.amount).toLocaleString()}
+                    </td>
+
+                    <td>{new Date(trx.created_at).toLocaleDateString()}</td>
+
+                    <td>
+                      <Workflow stage={trx.workflow_step} />
+                      <small className="stage-label">{trx.workflow_step}</small>
+                    </td>
+
+                    <td>
+                      <span className={`trx-status ${trx.status.toLowerCase()}`}>
+                        {trx.status}
+                      </span>
+                    </td>
+
+                    <td>
+                      <div className="transaction-actions">
+                        <button title="View" type="button">
+                          <Eye size={17} />
+                        </button>
+
+                        <button
+                          title="Approve"
+                          type="button"
+                          onClick={() => updateStatus(trx.id, "Completed")}
+                        >
+                          <CheckCircle size={17} />
+                        </button>
+
+                        <button
+                          title="Flag"
+                          type="button"
+                          onClick={() => updateStatus(trx.id, "Flagged")}
+                        >
+                          <Flag size={17} />
+                        </button>
+
+                        <button
+                          className="danger"
+                          title="Issue"
+                          type="button"
+                          onClick={() => updateStatus(trx.id, "Pending")}
+                        >
+                          <AlertTriangle size={17} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

@@ -63,9 +63,9 @@
   background:
     rgba(255,255,255,0.84);
 
+  -webkit-backdrop-filter: blur(10px);  
   backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-
+  
   color: var(--primary);
 
   display: flex;
@@ -123,8 +123,8 @@
   background:
     rgba(255,255,255,0.72);
 
+  -webkit-backdrop-filter: blur(10px);  
   backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
 
   border-radius: 36px;
 
@@ -429,4 +429,12 @@
     width: 100%;
   }
 
+}
+
+.upload-btn {
+  cursor: pointer;
+}
+
+.premium-upload-box {
+  position: relative;
 }

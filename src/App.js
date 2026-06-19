@@ -11,6 +11,7 @@ import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 
+
 /* =========================
    FARMER PAGES
 ========================= */
@@ -44,7 +45,7 @@ import BuyerFavorites from "./pages/BuyerFavorites";
 import BuyerMessages from "./pages/BuyerMessages";
 import BuyerTransactions from "./pages/BuyerTransactions";
 import BuyerNotifications from "./pages/BuyerNotifications";
-import BuyerMapExplorer from "./pages/BuyerMapExplorer";
+import BuyerMapExplorer from "./pages/BuyerMap";
 import BuyerProfile from "./pages/BuyerProfile";
 import BuyerSettings from "./pages/BuyerSettings";
 

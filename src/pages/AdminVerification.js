@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 import {
   Search,
   Eye,
@@ -13,39 +15,124 @@ import {
   MoreHorizontal,
 } from "lucide-react";
 
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import "./AdminVerification.css";
 
 function AdminVerification() {
-  const documents = [
-    {
-      id: "DOC-001",
-      farmer: "Almyr Belenson",
-      livestock: "Swine",
-      document: "Health Certificate",
-      file: "swine-health-certificate.pdf",
-      date: "May 20, 2026",
-      status: "Pending",
-    },
-    {
-      id: "DOC-002",
-      farmer: "Mario Santos",
-      livestock: "Cattle",
-      document: "BAI Transport Permit",
-      file: "cattle-bai-permit.pdf",
-      date: "May 19, 2026",
-      status: "Approved",
-    },
-    {
-      id: "DOC-003",
-      farmer: "Juan Dela Cruz",
-      livestock: "Goat",
-      document: "Vaccination Record",
-      file: "goat-vaccination-record.pdf",
-      date: "May 18, 2026",
-      status: "Rejected",
-    },
-  ];
+  const navigate = useNavigate();
+
+  const [documents, setDocuments] = useState([]);
+  const [stats, setStats] = useState({
+    pending: 0,
+    approved: 0,
+    rejected: 0,
+    total: 0,
+  });
+
+  const [searchText, setSearchText] = useState("");
+  const [documentFilter, setDocumentFilter] = useState("All Document Types");
+  const [statusFilter, setStatusFilter] = useState("All Status");
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+
+  const fetchVerification = async () => {
+    try {
+      const token = localStorage.getItem("token");
+
+      if (!token) {
+        navigate("/login");
+        return;
+      }
+
+      const res = await fetch("http://localhost:5000/api/admin/verification", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setMessage(data.message || "Failed to load verification records");
+        setLoading(false);
+        return;
+      }
+
+      setDocuments(data.documents);
+      setStats(data.stats);
+      setLoading(false);
+    } catch (error) {
+      setMessage("Cannot connect to backend server");
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchVerification();
+  }, []);
+
+  const updateStatus = async (id, status) => {
+    try {
+      const token = localStorage.getItem("token");
+
+      const res = await fetch(
+        `http://localhost:5000/api/admin/verification/${id}/status`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ status }),
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.message || "Failed to update verification status");
+        return;
+      }
+
+      fetchVerification();
+    } catch (error) {
+      alert("Cannot connect to backend server");
+    }
+  };
+
+  const filteredDocuments = documents.filter((doc) => {
+    const search = searchText.toLowerCase();
+    const documentType = getDocumentType(doc.livestock_type);
+
+    const displayStatus =
+      doc.status === "Available"
+        ? "Approved"
+        : doc.status === "Flagged"
+        ? "Rejected"
+        : doc.status;
+
+    const matchesSearch =
+      doc.farmer_name?.toLowerCase().includes(search) ||
+      doc.livestock_type?.toLowerCase().includes(search) ||
+      documentType.toLowerCase().includes(search) ||
+      String(doc.id).includes(search);
+
+    const matchesDocument =
+      documentFilter === "All Document Types" || documentType === documentFilter;
+
+    const matchesStatus =
+      statusFilter === "All Status" || displayStatus === statusFilter;
+
+    return matchesSearch && matchesDocument && matchesStatus;
+  });
+
+  if (loading) {
+    return <h2 style={{ padding: "30px" }}>Loading verification records...</h2>;
+  }
+
+  if (message) {
+    return <h2 style={{ padding: "30px", color: "red" }}>{message}</h2>;
+  }
 
   return (
     <div className="verification-page">
@@ -65,17 +152,40 @@ function AdminVerification() {
           </div>
         </div>
 
-        <button className="export-btn">
+        <button className="export-btn" type="button">
           <Download size={18} />
           Export Records
         </button>
       </header>
 
       <section className="verification-kpis">
-        <KpiCard icon={<Clock />} value="14" label="Pending Review" tone="warning" />
-        <KpiCard icon={<CheckCircle />} value="32" label="Approved Documents" tone="success" />
-        <KpiCard icon={<AlertTriangle />} value="5" label="Rejected / Flagged" tone="danger" />
-        <KpiCard icon={<ShieldCheck />} value="51" label="Total Submissions" tone="primary" />
+        <KpiCard
+          icon={<Clock />}
+          value={stats.pending}
+          label="Pending Review"
+          tone="warning"
+        />
+
+        <KpiCard
+          icon={<CheckCircle />}
+          value={stats.approved}
+          label="Approved Documents"
+          tone="success"
+        />
+
+        <KpiCard
+          icon={<AlertTriangle />}
+          value={stats.rejected}
+          label="Rejected / Flagged"
+          tone="danger"
+        />
+
+        <KpiCard
+          icon={<ShieldCheck />}
+          value={stats.total}
+          label="Total Submissions"
+          tone="primary"
+        />
       </section>
 
       <section className="verification-panel">
@@ -85,7 +195,7 @@ function AdminVerification() {
             <p>Process submitted livestock documents before transaction confirmation.</p>
           </div>
 
-          <button className="more-btn">
+          <button className="more-btn" type="button">
             <MoreHorizontal size={22} />
           </button>
         </div>
@@ -93,10 +203,18 @@ function AdminVerification() {
         <div className="verification-toolbar">
           <div className="verification-search">
             <Search size={18} />
-            <input placeholder="Search farmer, livestock, document, or file name..." />
+
+            <input
+              placeholder="Search farmer, livestock, document, or file name..."
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+            />
           </div>
 
-          <select>
+          <select
+            value={documentFilter}
+            onChange={(e) => setDocumentFilter(e.target.value)}
+          >
             <option>All Document Types</option>
             <option>Health Certificate</option>
             <option>BAI Transport Permit</option>
@@ -104,14 +222,17 @@ function AdminVerification() {
             <option>MAO Clearance</option>
           </select>
 
-          <select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
             <option>All Status</option>
             <option>Pending</option>
             <option>Approved</option>
             <option>Rejected</option>
           </select>
 
-          <button className="filter-btn">
+          <button className="filter-btn" type="button">
             <Filter size={17} />
             Filter
           </button>
@@ -133,64 +254,92 @@ function AdminVerification() {
             </thead>
 
             <tbody>
-              {documents.map((doc) => (
-                <tr key={doc.id}>
-                  <td>
-                    <strong>{doc.id}</strong>
-                  </td>
-
-                  <td>
-                    <div className="farmer-cell">
-                      <div className="avatar">{doc.farmer.charAt(0)}</div>
-                      <div>
-                        <strong>{doc.farmer}</strong>
-                        <p>Registered Farmer</p>
-                      </div>
-                    </div>
-                  </td>
-
-                  <td>
-                    <span className="livestock-pill">{doc.livestock}</span>
-                  </td>
-
-                  <td>{doc.document}</td>
-
-                  <td>
-                    <div className="file-cell">
-                      <FileText size={18} />
-                      <span>{doc.file}</span>
-                    </div>
-                  </td>
-
-                  <td>{doc.date}</td>
-
-                  <td>
-                    <span className={`doc-status ${doc.status.toLowerCase()}`}>
-                      {doc.status}
-                    </span>
-                  </td>
-
-                  <td>
-                    <div className="verification-actions">
-                      <button title="View Document">
-                        <Eye size={17} />
-                      </button>
-
-                      <button title="Download File">
-                        <Download size={17} />
-                      </button>
-
-                      <button title="Approve Document">
-                        <CheckCircle size={17} />
-                      </button>
-
-                      <button className="danger" title="Reject Document">
-                        <XCircle size={17} />
-                      </button>
-                    </div>
-                  </td>
+              {filteredDocuments.length === 0 ? (
+                <tr>
+                  <td colSpan="8">No verification records found.</td>
                 </tr>
-              ))}
+              ) : (
+                filteredDocuments.map((doc) => {
+                  const documentType = getDocumentType(doc.livestock_type);
+                  const displayStatus =
+                    doc.status === "Available"
+                      ? "Approved"
+                      : doc.status === "Flagged"
+                      ? "Rejected"
+                      : doc.status;
+
+                  return (
+                    <tr key={doc.id}>
+                      <td>
+                        <strong>DOC-{doc.id}</strong>
+                      </td>
+
+                      <td>
+                        <div className="farmer-cell">
+                          <div className="avatar">{doc.farmer_name.charAt(0)}</div>
+
+                          <div>
+                            <strong>{doc.farmer_name}</strong>
+                            <p>Registered Farmer</p>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td>
+                        <span className="livestock-pill">{doc.livestock_type}</span>
+                      </td>
+
+                      <td>{documentType}</td>
+
+                      <td>
+                        <div className="file-cell">
+                          <FileText size={18} />
+                          <span>
+                            {doc.livestock_type.toLowerCase()}-document.pdf
+                          </span>
+                        </div>
+                      </td>
+
+                      <td>{new Date(doc.created_at).toLocaleDateString()}</td>
+
+                      <td>
+                        <span className={`doc-status ${displayStatus.toLowerCase()}`}>
+                          {displayStatus}
+                        </span>
+                      </td>
+
+                      <td>
+                        <div className="verification-actions">
+                          <button title="View Document" type="button">
+                            <Eye size={17} />
+                          </button>
+
+                          <button title="Download File" type="button">
+                            <Download size={17} />
+                          </button>
+
+                          <button
+                            title="Approve Document"
+                            type="button"
+                            onClick={() => updateStatus(doc.id, "Available")}
+                          >
+                            <CheckCircle size={17} />
+                          </button>
+
+                          <button
+                            className="danger"
+                            title="Reject Document"
+                            type="button"
+                            onClick={() => updateStatus(doc.id, "Rejected")}
+                          >
+                            <XCircle size={17} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -216,10 +365,19 @@ function AdminVerification() {
   );
 }
 
+function getDocumentType(type) {
+  if (type === "Swine") return "Health Certificate";
+  if (type === "Cattle") return "BAI Transport Permit";
+  if (type === "Goat") return "Vaccination Record";
+  if (type === "Poultry") return "MAO Clearance";
+  return "Health Certificate";
+}
+
 function KpiCard({ icon, value, label, tone }) {
   return (
     <div className={`verify-kpi ${tone}`}>
       <div className="kpi-icon">{icon}</div>
+
       <div>
         <h2>{value}</h2>
         <p>{label}</p>

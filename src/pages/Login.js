@@ -11,24 +11,70 @@ import {
 } from "lucide-react";
 
 import { useNavigate, Link } from "react-router-dom";
-
 import "./Login.css";
 
 function Login() {
   const navigate = useNavigate();
 
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
 
-  const handleLogin = (e) => {
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+  });
+
+  const handleChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    });
+  };
+
+  const handleLogin = async (e) => {
     e.preventDefault();
+    setLoading(true);
+    setMessage("");
 
-    // TEMPORARY LOGIN
-    navigate("/farmer-dashboard");
+    try {
+      const res = await fetch("http://localhost:5000/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setMessage(data.message || "Login failed");
+        setLoading(false);
+        return;
+      }
+
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+
+      if (data.user.role === "admin") {
+        navigate("/admin-dashboard");
+      } else if (data.user.role === "farmer") {
+        navigate("/farmer-dashboard");
+      } else if (data.user.role === "buyer") {
+        navigate("/buyer-dashboard");
+      } else {
+        setMessage("Unknown user role");
+      }
+    } catch (error) {
+      setMessage("Cannot connect to backend server");
+    }
+
+    setLoading(false);
   };
 
   return (
     <div className="modern-login">
-      {/* LEFT SIDE */}
       <section className="login-showcase">
         <div className="overlay"></div>
 
@@ -45,13 +91,9 @@ function Login() {
           </div>
 
           <div className="showcase-text">
-            <span className="mini-title">
-              WEB-BASED LIVESTOCK MARKETPLACE
-            </span>
+            <span className="mini-title">WEB-BASED LIVESTOCK MARKETPLACE</span>
 
-            <h1>
-              Modern livestock trading for farmers and buyers in Veruela.
-            </h1>
+            <h1>Modern livestock trading for farmers and buyers in Veruela.</h1>
 
             <p>
               Secure livestock listings, transaction monitoring, map-based
@@ -66,9 +108,7 @@ function Login() {
 
               <div>
                 <strong>Secure Trading Workflow</strong>
-                <p>
-                  Verification-based livestock transactions with MAO monitoring.
-                </p>
+                <p>Verification-based livestock transactions with MAO monitoring.</p>
               </div>
             </div>
 
@@ -77,16 +117,13 @@ function Login() {
 
               <div>
                 <strong>Farmer & Buyer Messaging</strong>
-                <p>
-                  Built-in communication and negotiation tools for trading.
-                </p>
+                <p>Built-in communication and negotiation tools for trading.</p>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* RIGHT SIDE */}
       <section className="login-panel">
         <div className="login-card">
           <div className="login-header">
@@ -94,13 +131,16 @@ function Login() {
 
             <h2>Sign in to your account</h2>
 
-            <p>
-              Access your livestock marketplace dashboard and continue trading.
-            </p>
+            <p>Access your livestock marketplace dashboard and continue trading.</p>
           </div>
 
+          {message && (
+            <p style={{ color: "red", marginBottom: "15px" }}>
+              {message}
+            </p>
+          )}
+
           <form onSubmit={handleLogin}>
-            {/* EMAIL */}
             <div className="form-group">
               <label>Email Address</label>
 
@@ -108,14 +148,16 @@ function Login() {
                 <Mail size={20} />
 
                 <input
+                  name="email"
                   type="email"
                   placeholder="farmer@email.com"
+                  value={formData.email}
+                  onChange={handleChange}
                   required
                 />
               </div>
             </div>
 
-            {/* PASSWORD */}
             <div className="form-group">
               <div className="password-label">
                 <label>Password</label>
@@ -127,8 +169,11 @@ function Login() {
                 <Lock size={20} />
 
                 <input
+                  name="password"
                   type={showPassword ? "text" : "password"}
                   placeholder="Enter your password"
+                  value={formData.password}
+                  onChange={handleChange}
                   required
                 />
 
@@ -137,16 +182,11 @@ function Login() {
                   className="eye-btn"
                   onClick={() => setShowPassword(!showPassword)}
                 >
-                  {showPassword ? (
-                    <EyeOff size={18} />
-                  ) : (
-                    <Eye size={18} />
-                  )}
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
             </div>
 
-            {/* OPTIONS */}
             <div className="login-options">
               <label className="remember-box">
                 <input type="checkbox" />
@@ -154,23 +194,20 @@ function Login() {
               </label>
             </div>
 
-            {/* LOGIN BUTTON */}
-            <button className="login-btn" type="submit">
-              Sign In
+            <button className="login-btn" type="submit" disabled={loading}>
+              {loading ? "Signing in..." : "Sign In"}
               <ArrowRight size={18} />
             </button>
           </form>
 
-          {/* DIVIDER */}
           <div className="divider">
             <span></span>
             <p>OR CONTINUE WITH</p>
             <span></span>
           </div>
 
-          {/* SOCIAL */}
           <div className="social-login">
-            <button>
+            <button type="button">
               <img
                 src="https://cdn-icons-png.flaticon.com/512/2991/2991148.png"
                 alt="google"
@@ -178,17 +215,20 @@ function Login() {
               Google
             </button>
 
-            <button>
-              📱 Phone
-            </button>
+            <button type="button">📱 Phone</button>
           </div>
 
-          {/* REGISTER */}
           <div className="register-link">
             <p>
               Don’t have an account?
               <Link to="/register"> Create Account</Link>
             </p>
+          </div>
+
+          <div style={{ marginTop: "20px", fontSize: "13px", color: "#777" }}>
+            <p><strong>Default Admin Account</strong></p>
+            <p>Email: admin@herdmarket.com</p>
+            <p>Password: admin123</p>
           </div>
         </div>
       </section>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import {
   Bell,
@@ -21,18 +21,80 @@ import {
   Wallet,
 } from "lucide-react";
 
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import "./FarmerDashboard.css";
 
 function FarmerDashboard() {
+  const navigate = useNavigate();
+
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [dashboardData, setDashboardData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const fetchDashboard = async () => {
+      try {
+        const token = localStorage.getItem("token");
+
+        if (!token) {
+          navigate("/login");
+          return;
+        }
+
+        const res = await fetch("http://localhost:5000/api/farmer/dashboard", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          navigate("/login");
+          return;
+        }
+
+        if (data.user.role !== "farmer") {
+          navigate("/buyer-dashboard");
+          return;
+        }
+
+        setDashboardData(data);
+        setLoading(false);
+      } catch (error) {
+        setError("Cannot connect to backend server");
+        setLoading(false);
+      }
+    };
+
+    fetchDashboard();
+  }, [navigate]);
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    navigate("/login");
+  };
+
+  if (loading) {
+    return <h2 style={{ padding: "30px" }}>Loading farmer dashboard...</h2>;
+  }
+
+  if (error) {
+    return <h2 style={{ padding: "30px", color: "red" }}>{error}</h2>;
+  }
+
+  const userName = dashboardData?.user?.full_name || "Farmer";
+  const firstLetter = userName.charAt(0).toUpperCase();
 
   return (
     <div className="farmer-shell">
       <aside className={sidebarOpen ? "farmer-sidebar" : "farmer-sidebar collapsed"}>
         <div className="farmer-brand">
           <div className="farmer-logo">🐮</div>
+
           {sidebarOpen && (
             <div>
               <h3>HerdMarket</h3>
@@ -74,10 +136,10 @@ function FarmerDashboard() {
           <span>MAO approved</span>
         </div>
 
-        <Link className="farmer-logout" to="/login">
+        <button className="farmer-logout" onClick={handleLogout}>
           <LogOut size={20} />
           <span>Logout</span>
-        </Link>
+        </button>
       </aside>
 
       <main className="farmer-main">
@@ -92,7 +154,7 @@ function FarmerDashboard() {
 
             <div>
               <span className="eyebrow">Farmer Dashboard</span>
-              <h1>Welcome back, Almyr</h1>
+              <h1>Welcome back, {userName}</h1>
               <p>Manage your livestock listings, inquiries, and transactions.</p>
             </div>
           </div>
@@ -116,31 +178,32 @@ function FarmerDashboard() {
                 <div className="notification-dropdown">
                   <h4>Notifications</h4>
 
-                  <div className="notification-item unread">
-                    <strong>New inquiry</strong>
-                    <p>Juan asked about your Swine listing.</p>
-                    <small>2 mins ago</small>
-                  </div>
-
-                  <div className="notification-item">
-                    <strong>Transaction completed</strong>
-                    <p>Goat sale has been confirmed.</p>
-                    <small>1 hour ago</small>
-                  </div>
-
-                  <div className="notification-item">
-                    <strong>New message</strong>
-                    <p>Maria sent you a message.</p>
-                    <small>Today</small>
-                  </div>
+                  {dashboardData.activities.length === 0 ? (
+                    <div className="notification-item">
+                      <strong>No notifications</strong>
+                      <p>No recent activity yet.</p>
+                    </div>
+                  ) : (
+                    dashboardData.activities.slice(0, 3).map((item, index) => (
+                      <div
+                        className={index === 0 ? "notification-item unread" : "notification-item"}
+                        key={index}
+                      >
+                        <strong>{item.title}</strong>
+                        <p>{item.text}</p>
+                        <small>Recently</small>
+                      </div>
+                    ))
+                  )}
                 </div>
               )}
             </div>
 
             <div className="farmer-profile-chip">
-              <div className="profile-avatar">A</div>
+              <div className="profile-avatar">{firstLetter}</div>
+
               <div>
-                <strong>Almyr Belenson</strong>
+                <strong>{userName}</strong>
                 <p>Verified Farmer</p>
               </div>
             </div>
@@ -152,8 +215,8 @@ function FarmerDashboard() {
             <span>Marketplace Performance</span>
             <h2>Your herd is gaining more buyer attention this week.</h2>
             <p>
-              You received 3 new inquiries overnight. Keep your livestock listings
-              updated to improve buyer trust and visibility.
+              You received {dashboardData.stats.buyerInquiries} buyer inquiries.
+              Keep your livestock listings updated to improve buyer trust and visibility.
             </p>
 
             <div className="hero-actions">
@@ -169,36 +232,36 @@ function FarmerDashboard() {
           </div>
 
           <div className="hero-metric">
-            <strong>3</strong>
-            <span>New inquiries</span>
+            <strong>{dashboardData.stats.buyerInquiries}</strong>
+            <span>Buyer inquiries</span>
           </div>
         </section>
 
         <section className="kpi-grid">
           <KpiCard
             icon={<TrendingUp />}
-            value="12"
+            value={dashboardData.stats.activeListings}
             label="Active Listings"
-            note="+2 this week"
+            note="Current active posts"
           />
 
           <KpiCard
             icon={<MessageCircle />}
-            value="8"
+            value={dashboardData.stats.buyerInquiries}
             label="Buyer Inquiries"
-            note="3 unread"
+            note="Total inquiries"
           />
 
           <KpiCard
             icon={<CheckCircle />}
-            value="34"
+            value={dashboardData.stats.completedSales}
             label="Completed Sales"
             note="Recorded transactions"
           />
 
           <KpiCard
             icon={<Wallet />}
-            value="₱245K"
+            value={`₱${Number(dashboardData.stats.tradeValue).toLocaleString()}`}
             label="Trade Value"
             note="Estimated total"
           />
@@ -215,26 +278,27 @@ function FarmerDashboard() {
               <button>View all</button>
             </div>
 
-            <ActivityItem
-              icon={<ClipboardList />}
-              title="New inquiry received"
-              text="Buyer asked about your Swine listing."
-              time="2 mins ago"
-            />
-
-            <ActivityItem
-              icon={<BadgeCheck />}
-              title="Transaction completed"
-              text="Goat sale has been confirmed and recorded."
-              time="1 hour ago"
-            />
-
-            <ActivityItem
-              icon={<Clock />}
-              title="Verification pending"
-              text="Cattle document is waiting for MAO review."
-              time="Today"
-            />
+            {dashboardData.activities.length === 0 ? (
+              <p>No recent activity yet.</p>
+            ) : (
+              dashboardData.activities.map((item, index) => (
+                <ActivityItem
+                  key={index}
+                  icon={
+                    index === 0 ? (
+                      <ClipboardList />
+                    ) : index === 1 ? (
+                      <BadgeCheck />
+                    ) : (
+                      <Clock />
+                    )
+                  }
+                  title={item.title}
+                  text={item.text}
+                  time="Recently"
+                />
+              ))
+            )}
           </div>
 
           <div className="dashboard-card">
@@ -245,9 +309,18 @@ function FarmerDashboard() {
               </div>
             </div>
 
-            <ListingItem name="Swine" detail="Large White • ₱12,000" status="Available" />
-            <ListingItem name="Goat" detail="Boer Goat • ₱8,500" status="Pending" />
-            <ListingItem name="Cattle" detail="Brahman • ₱35,000" status="Available" />
+            {dashboardData.listings.length === 0 ? (
+              <p>No livestock listings yet.</p>
+            ) : (
+              dashboardData.listings.map((item) => (
+                <ListingItem
+                  key={item.id}
+                  name={item.livestock_type}
+                  detail={`${item.breed || "No breed"} • ₱${Number(item.price).toLocaleString()}`}
+                  status={item.status}
+                />
+              ))
+            )}
           </div>
         </section>
 
@@ -260,9 +333,18 @@ function FarmerDashboard() {
               </div>
             </div>
 
-            <WorkflowItem livestock="Swine" buyer="Juan Dela Cruz" step="Negotiation" />
-            <WorkflowItem livestock="Goat" buyer="Maria Santos" step="Completed" />
-            <WorkflowItem livestock="Cattle" buyer="Pedro Reyes" step="Verification" />
+            {dashboardData.workflows.length === 0 ? (
+              <p>No active transaction workflow yet.</p>
+            ) : (
+              dashboardData.workflows.map((item, index) => (
+                <WorkflowItem
+                  key={index}
+                  livestock={item.livestock_type}
+                  buyer={item.buyer_name}
+                  step={item.workflow_step}
+                />
+              ))
+            )}
           </div>
 
           <div className="dashboard-card">
@@ -279,7 +361,11 @@ function FarmerDashboard() {
               <div className="map-pin"></div>
 
               <div className="map-label">
-                <strong>Veruela, Agusan del Sur</strong>
+                <strong>
+                  {dashboardData.user.farm_location ||
+                    dashboardData.user.location ||
+                    "Veruela, Agusan del Sur"}
+                </strong>
                 <p>Farm location visible to buyers</p>
               </div>
             </div>
@@ -304,24 +390,16 @@ function KpiCard({ icon, value, label, note }) {
 function ActivityItem({ icon, title, text, time }) {
   return (
     <div className="activity-row">
-
       <div className="activity-left">
-
-        <div className="activity-icon">
-          {icon}
-        </div>
+        <div className="activity-icon">{icon}</div>
 
         <div className="activity-content">
           <strong>{title}</strong>
           <p>{text}</p>
         </div>
-
       </div>
 
-      <span className="activity-time">
-        {time}
-      </span>
-
+      <span className="activity-time">{time}</span>
     </div>
   );
 }
